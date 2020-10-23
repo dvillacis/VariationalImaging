@@ -1,0 +1,17 @@
+name = "VariationalImaging"
+uuid = "583acf7d-310a-4ea5-9857-5fc95db7f0cf"
+authors = ["David Villacis <david@villacis.net> and contributors"]
+version = "0.1.0"
+
+[deps]
+LinearOperators = "5c8ed15e-5a4c-59e4-a42b-c7e8811fb125"
+Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
+
+[compat]
+julia = "1"
+
+[extras]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Test"]
