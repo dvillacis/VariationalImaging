@@ -1,6 +1,6 @@
 export NormL21
 
-struct NormL21 <: AbstractImagingFunction
+struct NormL21 <: AbstractRegularizationTerm
     α::Real
 end
 

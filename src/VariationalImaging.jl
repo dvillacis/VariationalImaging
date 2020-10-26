@@ -7,13 +7,18 @@ using Printf
 
 import Base.show
 
-abstract type AbstractImagingFunction end
+abstract type AbstractDataTerm end
+abstract type AbstractRegularizationTerm end
 
 # Write your package code here.
 include("operators/Gradient.jl")
-include("functions/SqrNormL2.jl")
+
+include("functions/L2DataTerm.jl")
 include("functions/NormL21.jl")
-include("solvers/pdhg.jl")
+
+include("utilities/IterationTools.jl")
+
+include("solvers/PDHG.jl")
 
 export prox!, cprox!
 export TVDenoising, TikhonovDenoising
@@ -21,9 +26,10 @@ export TVDenoising, TikhonovDenoising
 function TVDenoising(img::AbstractArray{T,2},α::Real) where {T}
     M,N = size(img)
     L = Gradient(M,N)
-    f = SqrNormL2(img[:])
+    f = L2DataTerm(img[:])
     g = NormL21(α)
-    x = pdhg(f,g,L;x0=f.b,y0=L*f.b)
+    solver = PDHG(;maxit=1000, verbose=true)
+    x,res,iters = solver(f.b,L*f.b,f,g,L)
     return reshape(x,M,N)
 end
 
