@@ -3,64 +3,123 @@ export NSTR
 using Base.Iterators
 using Krylov
 
+struct TrustRegionModel{TG,TB} 
+    g::TG
+    B::TB
+end
+
 # Iterable
-struct NSTR_iterable{R,Tx}
-    x0::Tx
-    noisy::AbstractArray
-    upper_level_cost::Function
-    gradient_solver::Function
-    lower_level_solver::Function
-    η₁::R # Radius decrease
-    η₂::R
-    ρ₁::R # Quality measure
-    ρ₂::R
-    Δ₀::R # Initial radius
+struct NSTR_iterable{R,Tx,Tf}
+    f::Tf
+    x₀::Tx
+    η::R
+    Δ₀::R
 end
 
 Base.IteratorSize(::Type{<:NSTR_iterable}) = Base.IsInfinite()
 
 # State
-mutable struct NSTR_state{R,Tx,Timg}
+mutable struct NSTR_state{R,Tx,Tfx,TB}
     x::Tx
-    denoised::Timg
-    cost::Real
-    cost_::Real
-    grad::Real
-    grad_::Real
-    hess::LBFGSOperator
     Δ::R
-    step::R
+    fx::Tfx
+    B::TB
     res::R
 end
 
 function Base.iterate(iter::NSTR_iterable)
-    x = copy(iter.x0)
-    x̄ = copy(iter.x0)
+    x = copy(iter.x₀)
     Δ = copy(iter.Δ₀)
-    denoised = iter.lower_level_solver(iter.x0)
-    cost = iter.upper_level_cost(denoised)
-    cost_ = copy(cost)
-    grad = iter.gradient_solver(iter.x0)
-    grad_ = copy(grad)
-    hess = LBFGSOperator(1)
-    step= -0.1*grad
-    res = copy(cost)
-    state = NSTR_state(x,denoised, cost, cost_,grad,grad_,hess,Δ,step,res)
+    fx = iter.f(x)
+    if length(x) > 1
+        B = LBFGSOperator(length(x))
+    else
+        B = 1.0
+    end
+    res = 1.0
+    state = NSTR_state(x,Δ,fx,B,res)
     return state,state
+end
+
+function unconstrained_optimum(model)
+    if isa(model.B,LBFGSOperator)
+        p,_ = cg(model.B,-model.g) # TODO B puede estar mal condicionada
+    else
+        p = -model.B\model.g
+    end
+    return p, norm(p,2)
+end
+
+function cauchy_point(Δ,model)
+    t = 0
+    gᵗBg = model.g'*(model.B*model.g)
+    if gᵗBg ≤ 0
+        t = Δ/norm(model.g)
+    else
+        t = min(norm(model.g)^2/gᵗBg,Δ/norm(model.g))
+    end
+    return -t*model.g
+end
+
+
+function solve_model(Δ,model)
+    pU,pU_norm = unconstrained_optimum(model)
+    if pU_norm ≤ Δ
+        return pU,pU_norm,false
+    else
+        pC = cauchy_point(Δ,model)
+        return pC,norm(pC,2),false
+    end
+end
+
+function reduction_ratio(model,p,fx,fx̄)
+    #println("$fx, $fx̄, $p")
+    pred = - p'*model.g - 0.5*p'*(model.B*p)
+    ared = fx.c - fx̄.c
+    return ared/pred
 end
 
 function Base.iterate(iter::NSTR_iterable{R}, state::NSTR_state) where {R}
     
-    pred = -state.grad*state.step-0.5*state.step*state.hess*state.step
+    model = TrustRegionModel(state.fx.g,state.B)
+    p,p_norm,on_boundary = solve_model(state.Δ,model)
+    x̄ = state.x .+ p
+    fx̄ = iter.f(x̄)
+    ρ = reduction_ratio(model,p,state.fx,fx̄)
+    
+    # update LBFGS matrix
+    y = fx̄.g-state.fx.g
+    s = x̄-state.x
+    if isa(state.B,LBFGSOperator)
+        push!(state.B,s,y)
+    else
+        Bs = state.B*s
+        state.B = state.B .+ (y*y')/(y'*s) .- (Bs*Bs')/(s'*Bs)
+        println(state.B)
+    end
 
-    state.denoised = iter.lower_level_solver(state.x+state.step)
-    state.cost_ = iter.upper_level_cost(state.denoised)
-    ared = state.cost-state.cost_
+    # Radius update
+    Δ̄ = 
+        if ρ < 0.25
+            0.5*state.Δ
+        elseif ρ > 0.75
+            2*state.Δ
+        else
+            state.Δ
+        end
 
-    println(ared/pred)
+    # Point update
+    #println("ρ = $ρ")
+    if ρ ≥ iter.η
+        state.Δ = Δ̄
+        state.x = x̄
+        state.fx = fx̄
+    else
+        state.Δ = Δ̄
+    end
 
-    state.x += iter.ρ₁*state.grad*state.Δ
-    state.res = state.cost
+    state.res = norm(state.fx.g)
+    
     return state,state
 end
 
@@ -85,29 +144,22 @@ struct NSTR{R}
     end
 end
 
-function (solver::NSTR{R})(x0::Real,
-    noisy::AbstractArray{R,1},
-    upper_level_cost::Function,
-    gradient_solver::Function,
-    lower_level_solver::Function) where {R}
+function (solver::NSTR{R})(f,x₀;η=0.1,Δ₀=1.0) where {R}
     stop(state::NSTR_state) = state.res <= solver.tol
+    @printf("iter | x | cost | grad | radius\n")
     disp((it,state)) = @printf(
-        "%5d | %.3e | %.3e | %.3e\n",
+        "%4d | %.3e | %.3e | %.3e | %.3e\n",
         it,
-        state.x,
-        state.Δ,
-        state.cost
+        norm(state.x),
+        state.fx.c,
+        norm(state.fx.g),
+        state.Δ
     )
-    η₁ = 0.5
-    η₂ = 2.0
-    ρ₁ = 0.1
-    ρ₂ = 0.9
-    Δ₀ = 1.0
-    iter = NSTR_iterable(x0,noisy,upper_level_cost,gradient_solver,lower_level_solver,η₁,η₂,ρ₁,ρ₂,Δ₀)
+    iter = NSTR_iterable(f,x₀,η,Δ₀)
     iter = take(halt(iter,stop),solver.maxit)
     iter = enumerate(iter)
     if solver.verbose
-    iter = tee(sample(iter,solver.freq),disp)
+        iter = tee(sample(iter,solver.freq),disp)
     end
 
     num_iters, state_final = loop(iter)

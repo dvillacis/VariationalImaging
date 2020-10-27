@@ -50,12 +50,18 @@ end
 
 # Parameter Learning
 
-function find_optimal_parameter(x0::Real,img::AbstractArray{T,2},noisy::AbstractArray{T,2}) where {T}
-    lower_level_solver = x -> TVDenoising(noisy,x;maxit=100)
-    gradient_solver = x->x*-1
-    upper_level_cost = L2UpperLevelCost(img[:])
-    solver = NSTR(;verbose=true,freq=1)
-    x,res,iters = solver(x0,noisy[:],upper_level_cost,gradient_solver,lower_level_solver)
+function rof_function(x::Real,noisy::AbstractArray{T,2},img::AbstractArray{T,2}) where {T}
+    u = TVDenoising(noisy,x)
+    cost_fun = L2UpperLevelCost(img[:])
+    return u,cost_fun(u),-1
+end
+
+function find_optimal_parameter(x0::R,img::AbstractArray{T,2},noisy::AbstractArray{T,2}) where {R,T}
+    #f = x -> (u=x,c=(x+1)^2*exp(x),g=2*(x+1)*exp(x)+(x+1)^2*exp(x))
+    #f = x -> (u=x,c=(x+1)^2,g=2*(x+1))
+    f = x -> (u=x,c=(1-x[1])^2+100*(x[2]-x[1]^2)^2,g=[-2*(1-x[1])-200*x[1]*(x[2]-x[1]^2);200*(x[2]-x[1]^2)])
+    solver = NSTR(;verbose=true,freq=1000,maxit=30000)
+    x,res,iters = solver(f,x0)
     return x
 end
 
