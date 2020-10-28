@@ -34,7 +34,7 @@ function Base.iterate(iter::NSTR_iterable)
     if length(x) > 1
         B = LBFGSOperator(length(x))
     else
-        B = 1.0
+        B = 0.1
     end
     res = 1.0
     state = NSTR_state(x,Δ,fx,B,res)
@@ -73,9 +73,10 @@ function solve_model(Δ,model)
 end
 
 function reduction_ratio(model,p,fx,fx̄)
-    #println("$fx, $fx̄, $p")
+    #println("$(fx.c), $(fx̄.c), $p")
     pred = - p'*model.g - 0.5*p'*(model.B*p)
     ared = fx.c - fx̄.c
+    #println("pred = $pred, ared = $ared")
     return ared/pred
 end
 
@@ -90,12 +91,13 @@ function Base.iterate(iter::NSTR_iterable{R}, state::NSTR_state) where {R}
     # update LBFGS matrix
     y = fx̄.g-state.fx.g
     s = x̄-state.x
+    #println("B = $(state.B), y = $y, s = $s")
     if isa(state.B,LBFGSOperator)
         push!(state.B,s,y)
-    else
+    elseif abs(y) > 0
         Bs = state.B*s
-        state.B = state.B .+ (y*y')/(y'*s) .- (Bs*Bs')/(s'*Bs)
-        println(state.B)
+        state.B += (y*y')/(y'*s) .- (Bs*Bs')/(s'*Bs)
+        #println(state.B)
     end
 
     # Radius update
@@ -109,7 +111,7 @@ function Base.iterate(iter::NSTR_iterable{R}, state::NSTR_state) where {R}
         end
 
     # Point update
-    #println("ρ = $ρ")
+    println("ρ = $ρ")
     if ρ ≥ iter.η
         state.Δ = Δ̄
         state.x = x̄
