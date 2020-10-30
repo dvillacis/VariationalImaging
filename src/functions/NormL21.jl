@@ -1,7 +1,7 @@
 export NormL21
 
 struct NormL21{T} <: AbstractRegularizationTerm
-    α::Union{Real,AbstractArray{T,1}}
+    α::AbstractArray{T,1}
 end
 
 function NormL21(α::AbstractArray{T,2}) where {T}
@@ -13,7 +13,7 @@ function (f::NormL21)(x::AbstractArray{T,1}) where {T}
     n = Int(length(x)/2)
     @assert n == length(f.α)
     for i = 1:n
-        y += f.α[i]*norm([x[i] x[i+n]])
+        y += f.α[i]*sqrt(x[i]^2+x[i+n]^2)
     end
     return y
 end

@@ -1,5 +1,6 @@
 export PDHG
 
+using LinearAlgebra
 using Base.Iterators
 
 # Iterable
@@ -48,6 +49,11 @@ function Base.iterate(iter::PDHG_iterable{R}, state::PDHG_state) where {R}
     state.temp_x .= state.x .- iter.τ .* state.Δx
     prox!(state.x,iter.f,state.temp_x, iter.τ)
     state.x̄ .= 2 .* state.x .- state.x̄
+
+    # Residual calculation (PD gap)
+    primal = iter.f(state.x̄) + iter.g(iter.L*state.x̄)
+    dual = -conjugate(iter.f,iter.L'*state.y)
+    state.res = primal
     return state,state
 end
 

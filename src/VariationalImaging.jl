@@ -33,10 +33,10 @@ function TVDenoising(img::AbstractArray{T,2},α::Real;maxit=1000,verbose=false) 
     M,N = size(img)
     L = Gradient(M,N)
     f = L2DataTerm(img[:])
-    g = NormL21(α)
+    g = NormL21(α*ones(M,N))
     solver = PDHG(;maxit, verbose)
     x,res,iters = solver(f.b,L*f.b,f,g,L)
-    return x
+    return reshape(x,M,N)
 end
 
 function TVDenoising(img::AbstractArray{T,2},α::AbstractArray{T,2};maxit=1000,verbose=false) where {T}
@@ -46,7 +46,7 @@ function TVDenoising(img::AbstractArray{T,2},α::AbstractArray{T,2};maxit=1000,v
     g = NormL21(α)
     solver = PDHG(;maxit, verbose)
     x,res,iters = solver(f.b,L*f.b,f,g,L)
-    return x
+    return reshape(x,M,N)
 end
 
 function TikhonovDenoising(img::AbstractArray{T,2},α::Real) where {T}
