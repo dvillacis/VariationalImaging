@@ -111,7 +111,7 @@ function Base.iterate(iter::NSTR_iterable{R}, state::NSTR_state) where {R}
         end
 
     # Point update
-    println("ρ = $ρ")
+    #println("ρ = $ρ")
     if ρ ≥ iter.η
         state.Δ = Δ̄
         state.x = x̄
@@ -147,7 +147,7 @@ struct NSTR{R}
 end
 
 function (solver::NSTR{R})(f,x₀;η=0.1,Δ₀=1.0) where {R}
-    stop(state::NSTR_state) = state.res <= solver.tol
+    stop(state::NSTR_state) = state.res <= solver.tol || state.Δ ≤  solver.tol
     @printf("iter | x | cost | grad | radius\n")
     disp((it,state)) = @printf(
         "%4d | %.3e | %.3e | %.3e | %.3e\n",
