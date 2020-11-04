@@ -5,6 +5,8 @@ using Krylov
 using LinearAlgebra
 using Printf
 
+using ImageContrastAdjustment
+
 import Base.show
 
 abstract type AbstractDataTerm end
@@ -36,7 +38,7 @@ function TVDenoising(img::AbstractArray{T,2},α::Real;maxit=1000,verbose=false) 
     g = NormL21(α*ones(M,N))
     solver = PDHG(;maxit, verbose)
     x,res,iters = solver(f.b,L*f.b,f,g,L)
-    return reshape(x,M,N)
+    return adjust_histogram!(reshape(x,M,N),LinearStretching())
 end
 
 function TVDenoising(img::AbstractArray{T,2},α::AbstractArray{T,2};maxit=1000,verbose=false) where {T}
