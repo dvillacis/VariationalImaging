@@ -2,6 +2,7 @@ export NSTR
 
 using Base.Iterators
 using Krylov
+using Random
 
 struct TrustRegionModel{TG,TB} 
     g::TG
@@ -90,20 +91,18 @@ function Base.iterate(iter::NSTR_iterable{R}, state::NSTR_state) where {R}
     fx̄ = iter.f(x̄)
     state.ρ = reduction_ratio(model,p,state.fx,fx̄)
     
-    # update LBFGS matrix
+    # update SR1 matrix
     y = fx̄.g-state.fx.g
     s = x̄-state.x
-    #println("B = $(state.B), y = $y, s = $s")
-    if s'*y > 0
-        if isa(state.B,LBFGSOperator)
-            push!(state.B,s,y)
-        elseif abs(y) > 0
-            Bs = state.B*s
-            state.B += (y*y')/(y'*s) .- (Bs*Bs')/(s'*Bs)
-            #println(state.B)
+    if isa(state.B,LBFGSOperator)
+        push!(state.B,s,y)
+    elseif abs(y) > 0
+        yBs = y - state.B*s
+        state.B += ((yBs)*(yBs)')/((yBs)'*y) #SR1 Update
+        if bitrand(1) == [1]
+            state.B = 0.1
         end
-    else
-        @warn "Negative Curvature Detected at $(state.x) - Skipping BFGS update"
+        println(state.B)
     end
 
     # Radius update
