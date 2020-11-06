@@ -34,7 +34,7 @@ function Base.iterate(iter::NSTR_iterable)
     Δ = copy(iter.Δ₀)
     fx = iter.f(x)
     if length(x) > 1
-        B = LBFGSOperator(length(x))
+        B = LSR1Operator(length(x))
     else
         B = 0.1
     end
@@ -45,7 +45,7 @@ function Base.iterate(iter::NSTR_iterable)
 end
 
 function unconstrained_optimum(model)
-    if isa(model.B,LBFGSOperator)
+    if isa(model.B,LSR1Operator)
         p,_ = cg(model.B,-model.g) # TODO B puede estar mal condicionada
     else
         p = -model.B\model.g
@@ -94,15 +94,12 @@ function Base.iterate(iter::NSTR_iterable{R}, state::NSTR_state) where {R}
     # update SR1 matrix
     y = fx̄.g-state.fx.g
     s = x̄-state.x
-    if isa(state.B,LBFGSOperator)
+    yBs = y - state.B*s
+    if isa(state.B,LSR1Operator)
         push!(state.B,s,y)
-    elseif abs(y) > 0
-        yBs = y - state.B*s
+    elseif abs(yBs'*s) > 0.1*norm₂²(yBs) # Guarantee boundedness of the hessian approximation
         state.B += ((yBs)*(yBs)')/((yBs)'*y) #SR1 Update
-        if bitrand(1) == [1]
-            state.B = 0.1
-        end
-        println(state.B)
+        #println(state.B)
     end
 
     # Radius update
@@ -110,7 +107,7 @@ function Base.iterate(iter::NSTR_iterable{R}, state::NSTR_state) where {R}
         if state.ρ < 0.25
             0.5*state.Δ
         elseif state.ρ > 0.75
-            2*state.Δ
+            min(1e10,2*state.Δ) # Radius update modification for nonsmooth problems
         else
             state.Δ
         end
