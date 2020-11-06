@@ -1,4 +1,4 @@
-export L2DataTerm
+export L2DataTerm, conjugate
 
 struct L2DataTerm{T} <: AbstractDataTerm
     b::AbstractArray{T,1}
@@ -21,4 +21,8 @@ function prox!(y::AbstractArray{T,1},f::L2DataTerm{T},x::AbstractArray{T,1},τ::
     for k =1:n
         y[k] = (x[k]+τλ*f.b[k])/(1+τλ)
     end
+end
+
+function conjugate(f::L2DataTerm{T},x::AbstractArray{T,1}) where {T}
+    return -(1/(2*f.λ))*norm(x)^2 + f.b'*x
 end
