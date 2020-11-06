@@ -25,6 +25,7 @@ mutable struct NSTR_state{R,Tx,Tfx,TB}
     fx::Tfx
     B::TB
     res::R
+    ρ::R
 end
 
 function Base.iterate(iter::NSTR_iterable)
@@ -37,7 +38,8 @@ function Base.iterate(iter::NSTR_iterable)
         B = 0.1
     end
     res = 1.0
-    state = NSTR_state(x,Δ,fx,B,res)
+    ρ = 0.0
+    state = NSTR_state(x,Δ,fx,B,res,ρ)
     return state,state
 end
 
@@ -86,25 +88,29 @@ function Base.iterate(iter::NSTR_iterable{R}, state::NSTR_state) where {R}
     p,p_norm,on_boundary = solve_model(state.Δ,model)
     x̄ = state.x .+ p
     fx̄ = iter.f(x̄)
-    ρ = reduction_ratio(model,p,state.fx,fx̄)
+    state.ρ = reduction_ratio(model,p,state.fx,fx̄)
     
     # update LBFGS matrix
     y = fx̄.g-state.fx.g
     s = x̄-state.x
     #println("B = $(state.B), y = $y, s = $s")
-    if isa(state.B,LBFGSOperator)
-        push!(state.B,s,y)
-    elseif abs(y) > 0
-        Bs = state.B*s
-        state.B += (y*y')/(y'*s) .- (Bs*Bs')/(s'*Bs)
-        #println(state.B)
+    if s'*y > 0
+        if isa(state.B,LBFGSOperator)
+            push!(state.B,s,y)
+        elseif abs(y) > 0
+            Bs = state.B*s
+            state.B += (y*y')/(y'*s) .- (Bs*Bs')/(s'*Bs)
+            #println(state.B)
+        end
+    else
+        @warn "Negative Curvature Detected at $(state.x) - Skipping BFGS update"
     end
 
     # Radius update
     Δ̄ = 
-        if ρ < 0.25
+        if state.ρ < 0.25
             0.5*state.Δ
-        elseif ρ > 0.75
+        elseif state.ρ > 0.75
             2*state.Δ
         else
             state.Δ
@@ -112,7 +118,7 @@ function Base.iterate(iter::NSTR_iterable{R}, state::NSTR_state) where {R}
 
     # Point update
     #println("ρ = $ρ")
-    if ρ ≥ iter.η
+    if state.ρ ≥ iter.η
         state.Δ = Δ̄
         state.x = x̄
         state.fx = fx̄
@@ -146,7 +152,31 @@ struct NSTR{R}
     end
 end
 
-function (solver::NSTR{R})(f,x₀;η=0.1,Δ₀=1.0) where {R}
+function (solver::NSTR{R})(f,x₀::Real;η=0.1,Δ₀=0.1) where {R}
+    stop(state::NSTR_state) = state.res <= solver.tol || state.Δ ≤  solver.tol
+    @printf("iter | x | cost | grad | radius | ρ\n")
+    disp((it,state)) = @printf(
+        "%4d | %.3e | %.3e | %.3e | %.3e | %.3e\n",
+        it,
+        norm(state.x),
+        state.fx.c,
+        # norm(state.fx.g),
+        state.fx.g,
+        state.Δ,
+        state.ρ
+    )
+    iter = NSTR_iterable(f,x₀,η,Δ₀)
+    iter = take(halt(iter,stop),solver.maxit)
+    iter = enumerate(iter)
+    if solver.verbose
+        iter = tee(sample(iter,solver.freq),disp)
+    end
+
+    num_iters, state_final = loop(iter)
+    return state_final.x,state_final.fx,state_final.res,num_iters
+end
+
+function (solver::NSTR{R})(f,x₀::AbstractArray{T};η=0.1,Δ₀=0.1) where {R,T}
     stop(state::NSTR_state) = state.res <= solver.tol || state.Δ ≤  solver.tol
     @printf("iter | x | cost | grad | radius\n")
     disp((it,state)) = @printf(
@@ -165,7 +195,7 @@ function (solver::NSTR{R})(f,x₀;η=0.1,Δ₀=1.0) where {R}
     end
 
     num_iters, state_final = loop(iter)
-    return state_final.x,state_final.res,num_iters
+    return state_final.x,state_final.fx,state_final.res,num_iters
 end
 
 NSTR(::Type{R};kwargs...) where{R} = NSTR{R}(;kwargs...)

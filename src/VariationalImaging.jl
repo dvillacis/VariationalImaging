@@ -5,47 +5,94 @@ using Krylov
 using LinearAlgebra
 using Printf
 
+using ColorTypes: Gray
+import ColorVectorSpace
+
+using AlgTools.Util
+using AlgTools.LinkedLists
+using ImageTools.Denoise
+using ImageTools.Visualise
+
 import Base.show
 
 abstract type AbstractDataTerm end
 abstract type AbstractRegularizationTerm end
 
 # Write your package code here.
-include("operators/Gradient.jl")
+#include("operators/Gradient.jl")
 
-include("functions/L2DataTerm.jl")
-include("functions/NormL21.jl")
+#include("functions/L2DataTerm.jl")
+#include("functions/NormL21.jl")
 
 include("utilities/IterationTools.jl")
 
-include("solvers/PDHG.jl")
+include("SDDenoise.jl")
+include("Util.jl")
 
-include("bilevel_learning/L2UpperLevelCost.jl")
+#include("solvers/PDHG.jl")
+
+#include("bilevel_learning/L2UpperLevelCost.jl")
 include("bilevel_learning/NSTR.jl")
 
 export prox!, cprox!
-export TVDenoising, TikhonovDenoising
+export TVl₂Denoising, TikhonovDenoising
 export find_optimal_parameter
 
 # Image Denoising
 
-function TVDenoising(img::AbstractArray{T,2},α::Real;maxit=1000,verbose=false) where {T}
-    M,N = size(img)
-    L = Gradient(M,N)
-    f = L2DataTerm(img[:])
-    g = NormL21(α)
-    solver = PDHG(;maxit, verbose)
-    x,res,iters = solver(f.b,L*f.b,f,g,L)
+function TVl₂Denoising(img::AbstractArray{T,2},α::Real;maxit=1000,verbose=false,freq=10) where {T}
+
+    img = Float64.(Gray{Float64}.(img))
+
+    if verbose == false
+        verbose_iter = maxit+1
+    else
+        verbose_iter = freq
+    end
+
+    params = (
+        α = α,
+        τ₀ = 5,
+        σ₀ = 0.99/5,
+        ρ = 0,
+        accel = true,
+        verbose_iter = verbose_iter,
+        maxiter = maxit,
+        save_iterations = false
+    )
+
+    st, iterate = initialise_visualisation(false)
+    x, y, st = denoise_pdps(img; iterate=iterate, params=params)
+    finalise_visualisation(st)
+
     return x
 end
 
-function TVDenoising(img::AbstractArray{T,2},α::AbstractArray{T,2};maxit=1000,verbose=false) where {T}
-    M,N = size(img)
-    L = Gradient(M,N)
-    f = L2DataTerm(img[:])
-    g = NormL21(α)
-    solver = PDHG(;maxit, verbose)
-    x,res,iters = solver(f.b,L*f.b,f,g,L)
+function TVl₂Denoising(img::AbstractArray{T,2},α::AbstractArray{S,2};maxit=1000,verbose=false,freq=10,visualize=false) where {T,S}
+
+    img = Float64.(Gray{Float64}.(img))
+
+    if verbose == false
+        verbose_iter = maxit+1
+    else
+        verbose_iter = freq
+    end
+
+    params = (
+        α = α,
+        τ₀ = 5,
+        σ₀ = 0.99/5,
+        ρ = 0,
+        accel = true,
+        verbose_iter = verbose_iter,
+        maxiter = maxit,
+        save_iterations = false
+    )
+
+    st, iterate = initialise_visualisation(visualize)
+    x, y, st = denoise_sd_pdps(img; iterate=iterate, params=params)
+    finalise_visualisation(st)
+
     return x
 end
 
