@@ -19,6 +19,9 @@ using ImageQualityIndexes, ImageContrastAdjustment, ImageShow
 # ╔═╡ 678d847c-2057-11eb-0609-e517d1990028
 using ImageTools.Gradient
 
+# ╔═╡ be3b79a2-22a8-11eb-24f6-2f469ff92a30
+using LinearAlgebra
+
 # ╔═╡ 32b60ce0-1fa0-11eb-29d3-1d3df6525a7d
 md"""
 # TV-l₂ Scalar Parameter Learning
@@ -35,7 +38,7 @@ begin
 end
 
 # ╔═╡ 0d9c3818-1fa1-11eb-2d69-bd2d53d4bf65
-plot(αrange[1:900], costs[1:900],legend=:bottomright,label="lena")
+plot(αrange[50:100], costs[50:100],legend=:bottomright,label="lena")
 
 # ╔═╡ 656d23c2-1fa1-11eb-3b50-6d6eed3b00dc
 md" To perform this optimal parameter search we will make use a nonsmooth trust region algorithm provided in VariationalImaging. This parameter requires a function that return a tuple containing the parameter value, the cost function and the gradient at a particular value. In this first experiment let us consider a gradient approximation using finite differences."
@@ -92,7 +95,9 @@ Now, let us use the optimality system obtained for the bilevel problem described
 # ╔═╡ f883545c-2052-11eb-3ab3-27e0e9627e58
 function gradient(α,u,ū;maxiter=10) #Uzawa for saddle point problems
 	Ku = zeros(2,size(u)...)
+	Kuū = zeros(2,size(u)...)
 	∇₂!(Ku,u)
+	∇₂!(Kuū,u-ū)
 	nKu = sqrt.(Ku[1,:,:].^2 + Ku[2,:,:].^2)
 	Inact = nKu .> 1e-7
 	Inact2 = zeros(2,size(u)...)
@@ -102,33 +107,98 @@ function gradient(α,u,ū;maxiter=10) #Uzawa for saddle point problems
 	invKu = 1 ./(Inact .*nKu .+ Act)
 	Ku[1,:,:] .*= Inact .*invKu
 	Ku[2,:,:] .*= Inact .*invKu
-	KKu = zeros(size(u))
-	∇₂ᵀ!(KKu,Ku)
+	KtKu = zeros(size(u))
+	∇₂ᵀ!(KtKu,Ku)
 	
 	y = zeros(2,size(u)...)
 	x = zeros(size(u))
 	Δy = zeros(2,size(u)...)
+	Δᵗy = zeros(size(x))
+	ΔΔᵗy = zeros(size(y))
 	Δx = zeros(size(u))
 	for i = 1:maxiter
 		∇₂ᵀ!(Δx,y)	
 		x = ū-u-α*Δx
-		∇₂!(Δy,x)
-		y = y + (1/(5*α))*(Δy- Inact2 .*y)
+		∇₂ᵀ!(Δᵗy,Δy)
+		∇₂!(ΔΔᵗy,Δᵗy)
+		y = y + 0.001*(ΔΔᵗy + y - Kuū)
 	end
 	
-	return x[:]'*(Inact .*KKu)[:]
+	return x[:]'*(Inact .*KtKu)[:]
+end
+
+# ╔═╡ 5faeb57a-22ad-11eb-1a8b-8dfd75732f40
+function batchmul!(C, A, B)
+	@views C[1,:, :] = A[1,:, :] .* B
+	@views C[2,:, :] = A[2,:, :] .* B
+    return C
+end
+
+# ╔═╡ e608c7f0-22ad-11eb-28c1-5dcd657cf199
+function batchmul(A, B)
+    C = zeros(size(A))
+    return batchmul!(C, A, B)
+end
+
+# ╔═╡ 672e80c2-229d-11eb-1394-33df6473733d
+function gradient2(α,u,ū)
+	b = zeros(2,size(u)...)
+	∇₂!(b,u-ū)
+	
+	Ku = zeros(size(b))
+	KtKu = zeros(size(u))
+	∇₂!(Ku,u)
+	nKu = sqrt.(Ku[1,:,:].^2 + Ku[2,:,:].^2)
+	Inact = nKu .> 1e-7
+	Act = 1 .-Inact
+	invKu = 1 ./(Inact .*nKu .+ Act)
+	batchmul!(Ku,Ku,Inact .*invKu)
+	∇₂ᵀ!(KtKu,Ku)
+	
+	# Conjugate gradient
+	Ktx = zeros(size(u))
+	KKtx = zeros(2,size(u)...)
+	Ktp = zeros(size(u))
+	KKtp = zeros(2,size(u)...)
+	x = zeros(2,size(u)...)
+	
+	for i = 1:256
+		∇₂ᵀ!(Ktx,x)
+		∇₂!(KKtx,Ktx)
+		Ax = α*batchmul(KKtx,Act)+α*batchmul(KKtx,Inact)+ batchmul(x,Inact+0.005*Act)
+		r = b-Ax
+		p = r
+		∇₂ᵀ!(Ktp,p)
+		∇₂!(KKtp,Ktp)
+		Ap = α*KKtp+batchmul(KKtp,Act)+α*batchmul(KKtp,Inact)+ batchmul(p,Inact + 0.005*Act)
+		alpha = (r[:]'*r[:])/(p[:]'*Ap[:])
+		x += alpha * p
+		r_ = r - alpha * Ap
+		if norm(r_[:])<1e-6
+			println("cg[$i] r_=$(norm(r_[:]))")
+			break
+		end
+		#println("cg[$i] r_=$(norm(r_[:]))")
+		beta = (r_[:]'*r_[:])/(r[:]'*r[:])
+		p += r_ + beta * p
+		r = r_
+	end
+	
+	y = -α*Ktx - u + ū
+		
+	return y[:]'*(Inact .*KtKu)[:]
 end
 
 # ╔═╡ 19af755e-2053-11eb-0fe8-9f10affcdbb2
 function os_tr_function(α,img,noisy)
 	u = TVl₂Denoising(noisy,α)
 	c = 0.5*norm₂²(u-img)
-	g = gradient(α,u,img;maxiter=100)
+	g = gradient2(α,u,img)
 	return (u=u,c=c,g=g)
 end
 
 # ╔═╡ 4da59ad0-2053-11eb-3cf9-c74b460c7a9d
-αtest = 10.5
+αtest = 10.0
 
 # ╔═╡ 682c9bba-2053-11eb-1031-a59210db816b
 fd_approx = tr_function(αtest,img,noisy)
@@ -137,7 +207,7 @@ fd_approx = tr_function(αtest,img,noisy)
 os_approx = os_tr_function(αtest,img,noisy)
 
 # ╔═╡ 4a26c068-2077-11eb-2946-21d3654fcca5
-opt_os,fx_os,res_os,iters_os = solver(x->os_tr_function(x,img,noisy),x₀)
+#opt_os,fx_os,res_os,iters_os = solver(x->os_tr_function(x,img,noisy),2.1)
 
 # ╔═╡ 86f6b782-2077-11eb-1c8b-2ffbd1660c03
 #Gray.([img noisy adjust_histogram(fx_os.u,LinearStretching())])
@@ -164,6 +234,10 @@ opt_os,fx_os,res_os,iters_os = solver(x->os_tr_function(x,img,noisy),x₀)
 # ╟─3bf1ae34-2047-11eb-3314-2b46b6dad513
 # ╠═678d847c-2057-11eb-0609-e517d1990028
 # ╠═f883545c-2052-11eb-3ab3-27e0e9627e58
+# ╠═be3b79a2-22a8-11eb-24f6-2f469ff92a30
+# ╠═5faeb57a-22ad-11eb-1a8b-8dfd75732f40
+# ╠═e608c7f0-22ad-11eb-28c1-5dcd657cf199
+# ╠═672e80c2-229d-11eb-1394-33df6473733d
 # ╠═19af755e-2053-11eb-0fe8-9f10affcdbb2
 # ╠═4da59ad0-2053-11eb-3cf9-c74b460c7a9d
 # ╠═682c9bba-2053-11eb-1031-a59210db816b

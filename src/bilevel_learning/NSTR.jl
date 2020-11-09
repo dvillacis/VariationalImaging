@@ -2,7 +2,6 @@ export NSTR
 
 using Base.Iterators
 using Krylov
-using Random
 
 struct TrustRegionModel{TG,TB} 
     g::TG
@@ -27,6 +26,7 @@ mutable struct NSTR_state{R,Tx,Tfx,TB}
     B::TB
     res::R
     ρ::R
+    error_flag::Bool
 end
 
 function Base.iterate(iter::NSTR_iterable)
@@ -40,7 +40,7 @@ function Base.iterate(iter::NSTR_iterable)
     end
     res = 1.0
     ρ = 0.0
-    state = NSTR_state(x,Δ,fx,B,res,ρ)
+    state = NSTR_state(x,Δ,fx,B,res,ρ,false)
     return state,state
 end
 
@@ -76,10 +76,8 @@ function solve_model(Δ,model)
 end
 
 function reduction_ratio(model,p,fx,fx̄)
-    #println("$(fx.c), $(fx̄.c), $p")
     pred = - p'*model.g - 0.5*p'*(model.B*p)
     ared = fx.c - fx̄.c
-    #println("pred = $pred, ared = $ared")
     return ared/pred
 end
 
@@ -94,12 +92,15 @@ function Base.iterate(iter::NSTR_iterable{R}, state::NSTR_state) where {R}
     # update SR1 matrix
     y = fx̄.g-state.fx.g
     s = x̄-state.x
+    if isnan(y)
+        @error "Error in gradient calculation"
+        state.error_flag=true
+    end
     yBs = y - state.B*s
     if isa(state.B,LSR1Operator)
         push!(state.B,s,y)
-    elseif abs(yBs'*s) > 0.1*norm₂²(yBs) # Guarantee boundedness of the hessian approximation
+    elseif abs(yBs'*s) > 0.1*norm₂²(yBs)# Guarantee boundedness of the hessian approximation
         state.B += ((yBs)*(yBs)')/((yBs)'*y) #SR1 Update
-        #println(state.B)
     end
 
     # Radius update
@@ -113,7 +114,6 @@ function Base.iterate(iter::NSTR_iterable{R}, state::NSTR_state) where {R}
         end
 
     # Point update
-    #println("ρ = $ρ")
     if state.ρ ≥ iter.η
         state.Δ = Δ̄
         state.x = x̄
@@ -149,14 +149,13 @@ struct NSTR{R}
 end
 
 function (solver::NSTR{R})(f,x₀::Real;η=0.1,Δ₀=0.1) where {R}
-    stop(state::NSTR_state) = state.res <= solver.tol || state.Δ ≤  solver.tol
+    stop(state::NSTR_state) = state.res <= solver.tol || state.Δ ≤  solver.tol || state.error_flag == true
     @printf("iter | x | cost | grad | radius | ρ\n")
     disp((it,state)) = @printf(
         "%4d | %.3e | %.3e | %.3e | %.3e | %.3e\n",
         it,
         norm(state.x),
         state.fx.c,
-        # norm(state.fx.g),
         state.fx.g,
         state.Δ,
         state.ρ
@@ -173,7 +172,7 @@ function (solver::NSTR{R})(f,x₀::Real;η=0.1,Δ₀=0.1) where {R}
 end
 
 function (solver::NSTR{R})(f,x₀::AbstractArray{T};η=0.1,Δ₀=0.1) where {R,T}
-    stop(state::NSTR_state) = state.res <= solver.tol || state.Δ ≤  solver.tol
+    stop(state::NSTR_state) = state.res <= solver.tol || state.Δ ≤  solver.tol || state.error_flag == true
     @printf("iter | x | cost | grad | radius\n")
     disp((it,state)) = @printf(
         "%4d | %.3e | %.3e | %.3e | %.3e\n",
