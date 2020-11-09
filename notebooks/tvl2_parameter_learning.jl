@@ -35,7 +35,7 @@ begin
 end
 
 # ╔═╡ 0d9c3818-1fa1-11eb-2d69-bd2d53d4bf65
-plot(αrange[500:700], costs[500:700],legend=:bottomright,label="lena")
+plot(αrange[1:900], costs[1:900],legend=:bottomright,label="lena")
 
 # ╔═╡ 656d23c2-1fa1-11eb-3b50-6d6eed3b00dc
 md" To perform this optimal parameter search we will make use a nonsmooth trust region algorithm provided in VariationalImaging. This parameter requires a function that return a tuple containing the parameter value, the cost function and the gradient at a particular value. In this first experiment let us consider a gradient approximation using finite differences."
