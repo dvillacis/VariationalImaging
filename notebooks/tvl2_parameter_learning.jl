@@ -20,7 +20,7 @@ using ImageQualityIndexes, ImageContrastAdjustment, ImageShow
 using ImageTools.Gradient
 
 # ╔═╡ be3b79a2-22a8-11eb-24f6-2f469ff92a30
-using LinearAlgebra, SparseArrays
+using LinearAlgebra, SparseArrays, BenchmarkTools
 
 # ╔═╡ 32b60ce0-1fa0-11eb-29d3-1d3df6525a7d
 md"""
@@ -38,7 +38,7 @@ begin
 end
 
 # ╔═╡ 0d9c3818-1fa1-11eb-2d69-bd2d53d4bf65
-plot(αrange[50:100], costs[50:100],legend=:bottomright,label="lena")
+plot(αrange[1000:9000], costs[1000:9000],legend=:bottomright,label="lena")
 
 # ╔═╡ 656d23c2-1fa1-11eb-3b50-6d6eed3b00dc
 md" To perform this optimal parameter search we will make use a nonsmooth trust region algorithm provided in VariationalImaging. This parameter requires a function that return a tuple containing the parameter value, the cost function and the gradient at a particular value. In this first experiment let us consider a gradient approximation using finite differences."
@@ -97,14 +97,8 @@ function createDivMatrix(n)
 	Hx = spdiagm(-1=>-ones(n-1),1=>ones(n-1))
 	Gx = kron(spdiagm(0=>ones(n)),Hx)
 	Gy = spdiagm(-n=>-ones(n^2-n),n=>ones(n^2-n))
-	return [Gx;Gy]
+	return [Gy;Gx]
 end
-
-# ╔═╡ a498b36e-2435-11eb-3a71-35cf75148911
-A = createDivMatrix(3)
-
-# ╔═╡ bfccd358-2436-11eb-0dd0-bd91b7816749
-spy(A)
 
 # ╔═╡ 64345a82-2438-11eb-19fc-a5bcd3c6207b
 function prodesc(q,p)
@@ -119,35 +113,54 @@ function prodesc(q,p)
 		  spdiagm(0=>p1.*q2) spdiagm(0=>p2.*q2)]
 end
 
+# ╔═╡ f2c7c5e4-2470-11eb-39e2-b12eaae13730
+function xi(x)
+	y = zeros(size(x))
+	n = Int(size(x,1)/2)
+	for i = 1:n
+		y[i] = norm([x[i];x[i+n]],2)
+		y[i+n] = norm([x[i];x[i+n]],2)
+	end
+	return y
+end		
+
 # ╔═╡ 2d6b340e-2435-11eb-193b-8f9600fcf433
 function gradient(α,u,ū)
+	u = Float64.(Gray{Float64}.(u))
+	ū = Float64.(Gray{Float64}.(ū))
 	# Obtain Active and inactive sets
-	Ku = zeros(2,size(u)...)
-	∇₂!(Ku,u)
-	nKu = sqrt.(Ku[1,:,:].^2 + Ku[2,:,:].^2)
-	inact = nKu .> 1e-5
-	act = 1 .- inact
-	Inact = spdiagm(0=>inact[:])
-	Act = spdiagm(0=>act[:])
+	n = size(u,1)
+	G = createDivMatrix(n)
+	Gu = G*u[:]
+	nGu = xi(Gu)
+	act = nGu .< 1e-3
+	inact = 1 .- act
+	Act = spdiagm(0=>act)
+	Inact = spdiagm(0=>inact)
 	
 	# Vector with grad norm in inactive components and one in the active
-	den = Inact*nKu[:] + act[:]
+	den = Inact*nGu+act
+	Den = spdiagm(0=>1 ./den)
 	
 	# Generate centered gradient matrix
-	M,N = size(u)
-	n = M*N
-	G = createDivMatrix(n)
+	
 	
 	# prod KuKuᵗ/norm³
-	Gu = G*u[:]
-	prodKuKu = prodesc(Gu ./(den.^3),Gu)
+	prodKuKu = prodesc(Gu ./den.^3,Gu)
 	
-	Adj = [spdiagm(0=>ones(n)) α*G]
-	return Adj
+	Adj = [spdiagm(0=>ones(n^2)) α*G';
+			Act*G-Inact*(prodKuKu-Den)*G Inact+Act]#+sqrt(eps())*Act]
+	
+	Track=[(u[:]-ū[:]);zeros(2*n^2)]
+	@time mult = Adj\Track
+	println("res = $(norm(Adj*mult-Track))")
+	p = @view mult[1:n^2]
+	#KᵗKu = zeros(size(u))
+	#∇₂ᵀ!(KᵗKu,batchmul(Ku,den))
+	#t = inact .* KᵗKu
+	#return -sum(p .*t[:])
+	return -p'*(Inact*G'*Gu)
 end
-
-# ╔═╡ edf4c032-2439-11eb-1112-0f6d53f462c7
-A1 = gradient(0.1,noisy,img)
 
 # ╔═╡ 39135c0e-2370-11eb-30d2-99637f8643f8
 function T(Ku,invnKu,v)
@@ -210,18 +223,49 @@ end
 function os_tr_function(α,img,noisy)
 	u = TVl₂Denoising(noisy,α)
 	c = 0.5*norm₂²(u-img)
-	g = -1.0#gradient3(α,u,img)
+	g = gradient(α,u,img)
+	println("Gradient at $α = $g")
 	return (u=u,c=c,g=g)
 end
 
 # ╔═╡ 4da59ad0-2053-11eb-3cf9-c74b460c7a9d
-αtest = 0.06
+αtest = 1.8
+
+# ╔═╡ a8b83696-246b-11eb-3eb9-a3125db0e32e
+u = TVl₂Denoising(noisy,αtest)
+
+# ╔═╡ b2c5575e-246b-11eb-1429-01c420948f4f
+begin 
+	Ku = zeros(2,size(u)...)
+	∇₂!(Ku,u)
+end
+
+# ╔═╡ f33d79e2-246b-11eb-255e-219a15ca856f
+nKu = sqrt.(Ku[1,:,:].^2 + Ku[2,:,:].^2)
+
+# ╔═╡ f9cd36d0-246b-11eb-14e4-0d42b8a948d5
+sum(nKu .== 0)
 
 # ╔═╡ 682c9bba-2053-11eb-1031-a59210db816b
 fd_approx = tr_function(αtest,img,noisy)
 
 # ╔═╡ b70ef3c2-2053-11eb-3a6e-0fc254c1b5cd
 os_approx = os_tr_function(αtest,img,noisy)
+
+# ╔═╡ a1a0f0fa-2455-11eb-3d7d-830f004b3220
+αrange2 = 0.001:0.05:0.4
+
+# ╔═╡ b4c5a5ba-2455-11eb-100d-7dd110c9c04b
+#fd_grad = [tr_function(i,img,noisy).g for i ∈ αrange2]
+
+# ╔═╡ d9675fda-2455-11eb-04a5-bd9b39aa4bf2
+#os_grad = [os_tr_function(i,img,noisy).g for i ∈ αrange2]
+
+# ╔═╡ e4e2c3ea-2455-11eb-10b3-35d766ac4a92
+#begin
+	#plot(αrange2,fd_grad,label="fd")
+#	plot(αrange2,os_grad,label="os")
+#end
 
 # ╔═╡ 4a26c068-2077-11eb-2946-21d3654fcca5
 #opt_os,fx_os,res_os,iters_os = solver(x->os_tr_function(x,img,noisy),2.1)
@@ -253,18 +297,24 @@ os_approx = os_tr_function(αtest,img,noisy)
 # ╠═ec6d509e-2392-11eb-1ac3-05879bb31a36
 # ╠═f883545c-2052-11eb-3ab3-27e0e9627e58
 # ╠═be3b79a2-22a8-11eb-24f6-2f469ff92a30
-# ╠═a498b36e-2435-11eb-3a71-35cf75148911
-# ╠═bfccd358-2436-11eb-0dd0-bd91b7816749
 # ╠═51e28cde-2436-11eb-0bc6-b5a6f526e750
 # ╠═64345a82-2438-11eb-19fc-a5bcd3c6207b
+# ╠═f2c7c5e4-2470-11eb-39e2-b12eaae13730
 # ╠═2d6b340e-2435-11eb-193b-8f9600fcf433
-# ╠═edf4c032-2439-11eb-1112-0f6d53f462c7
 # ╠═39135c0e-2370-11eb-30d2-99637f8643f8
 # ╠═7c46e6aa-2369-11eb-1892-ebb1d305b956
 # ╠═19af755e-2053-11eb-0fe8-9f10affcdbb2
 # ╠═4da59ad0-2053-11eb-3cf9-c74b460c7a9d
+# ╠═a8b83696-246b-11eb-3eb9-a3125db0e32e
+# ╠═b2c5575e-246b-11eb-1429-01c420948f4f
+# ╠═f33d79e2-246b-11eb-255e-219a15ca856f
+# ╠═f9cd36d0-246b-11eb-14e4-0d42b8a948d5
 # ╠═682c9bba-2053-11eb-1031-a59210db816b
 # ╠═b70ef3c2-2053-11eb-3a6e-0fc254c1b5cd
+# ╠═a1a0f0fa-2455-11eb-3d7d-830f004b3220
+# ╠═b4c5a5ba-2455-11eb-100d-7dd110c9c04b
+# ╠═d9675fda-2455-11eb-04a5-bd9b39aa4bf2
+# ╠═e4e2c3ea-2455-11eb-10b3-35d766ac4a92
 # ╠═4a26c068-2077-11eb-2946-21d3654fcca5
 # ╠═86f6b782-2077-11eb-1c8b-2ffbd1660c03
 # ╠═a7f9929c-2077-11eb-30df-5de48fd58ace
