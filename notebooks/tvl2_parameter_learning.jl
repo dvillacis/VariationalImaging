@@ -92,6 +92,26 @@ Now, let us use the optimality system obtained for the bilevel problem described
 
 """
 
+# ╔═╡ 39135c0e-2370-11eb-30d2-99637f8643f8
+function T(Ku,invnKu,v)
+	invnKu³ = invnKu.^3
+	a = batchmul(v,invnKu)
+	b = zeros(size(v))
+	m = Ku[1,:,:] .* Ku[2,:,:]
+	@views b[1,:,:] = Ku[1,:,:].^2*v[1,:,:] + m .* v[2,:,:]
+	@views b[2,:,:] = Ku[2,:,:].^2*v[2,:,:] + m .* v[1,:,:]
+	c = batchmul(b,invnKu³)
+	return a# - c
+end
+
+# ╔═╡ ec6d509e-2392-11eb-1ac3-05879bb31a36
+function S2(x,y,Ku,invnKu,Inact,Act;ϵ=0.01)
+	Kx = zeros(size(y))
+	∇₂!(Kx,x)
+	TKx = T(Ku,invnKu,Kx)
+	return batchmul(Kx,Act) - batchmul(TKx,Inact) + batchmul(y,(Inact + ϵ*Act))
+end
+
 # ╔═╡ f883545c-2052-11eb-3ab3-27e0e9627e58
 function gradient(α,u,ū;maxiter=10) #Uzawa for saddle point problems
 	Ku = zeros(2,size(u)...)
@@ -100,44 +120,33 @@ function gradient(α,u,ū;maxiter=10) #Uzawa for saddle point problems
 	∇₂!(Kuū,u-ū)
 	nKu = sqrt.(Ku[1,:,:].^2 + Ku[2,:,:].^2)
 	Inact = nKu .> 1e-7
-	Inact2 = zeros(2,size(u)...)
-	Inact2[1,:,:] = Inact
-	Inact2[2,:,:] = Inact
 	Act = 1 .- Inact
 	invKu = 1 ./(Inact .*nKu .+ Act)
-	Ku[1,:,:] .*= Inact .*invKu
-	Ku[2,:,:] .*= Inact .*invKu
+	batchmul!(Ku,Ku,Inact)
 	KtKu = zeros(size(u))
 	∇₂ᵀ!(KtKu,Ku)
 	
 	y = zeros(2,size(u)...)
 	x = zeros(size(u))
-	Δy = zeros(2,size(u)...)
-	Δᵗy = zeros(size(x))
-	ΔΔᵗy = zeros(size(y))
 	Δx = zeros(size(u))
 	for i = 1:maxiter
 		∇₂ᵀ!(Δx,y)	
 		x = ū-u-α*Δx
-		∇₂ᵀ!(Δᵗy,Δy)
-		∇₂!(ΔΔᵗy,Δᵗy)
-		y = y + 0.001*(ΔΔᵗy + y - Kuū)
+		y += 0.00001*S2(x,y,Ku,invKu,Inact,Act)
 	end
 	
 	return x[:]'*(Inact .*KtKu)[:]
 end
 
-# ╔═╡ 5faeb57a-22ad-11eb-1a8b-8dfd75732f40
-function batchmul!(C, A, B)
-	@views C[1,:, :] = A[1,:, :] .* B
-	@views C[2,:, :] = A[2,:, :] .* B
-    return C
-end
-
-# ╔═╡ e608c7f0-22ad-11eb-28c1-5dcd657cf199
-function batchmul(A, B)
-    C = zeros(size(A))
-    return batchmul!(C, A, B)
+# ╔═╡ 7c46e6aa-2369-11eb-1892-ebb1d305b956
+#Schur complement operator
+function S(α,x,Ku,invnKu,Inact,Act;ϵ=10.1)
+	Kᵗx = zeros(size(x,2),size(x,3))
+	KKᵗx = zeros(size(x))
+	∇₂ᵀ!(Kᵗx,x)
+	∇₂!(KKᵗx,Kᵗx)
+	TKKᵗx = T(Ku,invnKu,KKᵗx)
+	return α*batchmul(KKᵗx,Act) - α*batchmul(TKKᵗx,Inact) - batchmul(x,(Inact + ϵ*Act))
 end
 
 # ╔═╡ 672e80c2-229d-11eb-1394-33df6473733d
@@ -151,26 +160,18 @@ function gradient2(α,u,ū)
 	nKu = sqrt.(Ku[1,:,:].^2 + Ku[2,:,:].^2)
 	Inact = nKu .> 1e-7
 	Act = 1 .-Inact
-	invKu = 1 ./(Inact .*nKu .+ Act)
-	batchmul!(Ku,Ku,Inact .*invKu)
+	invnKu = 1 ./(Inact .*nKu .+ Act)
+	batchmul!(Ku,Ku,Inact .*invnKu)
 	∇₂ᵀ!(KtKu,Ku)
 	
 	# Conjugate gradient
-	Ktx = zeros(size(u))
-	KKtx = zeros(2,size(u)...)
-	Ktp = zeros(size(u))
-	KKtp = zeros(2,size(u)...)
 	x = zeros(2,size(u)...)
 	
 	for i = 1:256
-		∇₂ᵀ!(Ktx,x)
-		∇₂!(KKtx,Ktx)
-		Ax = α*batchmul(KKtx,Act)+α*batchmul(KKtx,Inact)+ batchmul(x,Inact+0.005*Act)
+		Ax = S(α,x,Ku,invnKu,Inact,Act)
 		r = b-Ax
 		p = r
-		∇₂ᵀ!(Ktp,p)
-		∇₂!(KKtp,Ktp)
-		Ap = α*KKtp+batchmul(KKtp,Act)+α*batchmul(KKtp,Inact)+ batchmul(p,Inact + 0.005*Act)
+		Ap = S(α,p,Ku,invnKu,Inact,Act)
 		alpha = (r[:]'*r[:])/(p[:]'*Ap[:])
 		x += alpha * p
 		r_ = r - alpha * Ap
@@ -178,27 +179,49 @@ function gradient2(α,u,ū)
 			println("cg[$i] r_=$(norm(r_[:]))")
 			break
 		end
-		#println("cg[$i] r_=$(norm(r_[:]))")
+		println("cg[$i] r_=$(norm(r_[:]))")
 		beta = (r_[:]'*r_[:])/(r[:]'*r[:])
 		p += r_ + beta * p
 		r = r_
 	end
-	
+	Ktx = zeros(size(u))
+	∇₂ᵀ!(Ktx,x)
 	y = -α*Ktx - u + ū
 		
 	return y[:]'*(Inact .*KtKu)[:]
 end
 
+# ╔═╡ cef41040-23cc-11eb-2c9c-1759719676f4
+function gradient3(α,u,ū;maxiter=100)
+	Ku = zeros(2,size(u)...)
+	∇₂!(Ku,u)
+	KtKu = zeros(size(u))
+	∇₂ᵀ!(KtKu,Ku)
+	
+	y = zeros(2,size(u)...)
+	x = zeros(size(u))
+	Δx = zeros(size(u))
+	Δy = zeros(size(y))
+	for i = 1:maxiter
+		∇₂ᵀ!(Δx,y)	
+		x = ū-u-α*Δx
+		∇₂!(Δy,x)
+		y += 0.01*Δy
+	end
+	return x[:]'*(KtKu)[:]
+end
+	
+
 # ╔═╡ 19af755e-2053-11eb-0fe8-9f10affcdbb2
 function os_tr_function(α,img,noisy)
 	u = TVl₂Denoising(noisy,α)
 	c = 0.5*norm₂²(u-img)
-	g = gradient2(α,u,img)
+	g = gradient3(α,u,img)
 	return (u=u,c=c,g=g)
 end
 
 # ╔═╡ 4da59ad0-2053-11eb-3cf9-c74b460c7a9d
-αtest = 10.0
+αtest = 0.06
 
 # ╔═╡ 682c9bba-2053-11eb-1031-a59210db816b
 fd_approx = tr_function(αtest,img,noisy)
@@ -233,11 +256,13 @@ os_approx = os_tr_function(αtest,img,noisy)
 # ╠═a2946062-1fb3-11eb-1ead-3bac6978cde2
 # ╟─3bf1ae34-2047-11eb-3314-2b46b6dad513
 # ╠═678d847c-2057-11eb-0609-e517d1990028
+# ╠═ec6d509e-2392-11eb-1ac3-05879bb31a36
 # ╠═f883545c-2052-11eb-3ab3-27e0e9627e58
 # ╠═be3b79a2-22a8-11eb-24f6-2f469ff92a30
-# ╠═5faeb57a-22ad-11eb-1a8b-8dfd75732f40
-# ╠═e608c7f0-22ad-11eb-28c1-5dcd657cf199
+# ╠═39135c0e-2370-11eb-30d2-99637f8643f8
+# ╠═7c46e6aa-2369-11eb-1892-ebb1d305b956
 # ╠═672e80c2-229d-11eb-1394-33df6473733d
+# ╠═cef41040-23cc-11eb-2c9c-1759719676f4
 # ╠═19af755e-2053-11eb-0fe8-9f10affcdbb2
 # ╠═4da59ad0-2053-11eb-3cf9-c74b460c7a9d
 # ╠═682c9bba-2053-11eb-1031-a59210db816b

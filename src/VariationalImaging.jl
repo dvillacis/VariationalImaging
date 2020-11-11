@@ -25,6 +25,7 @@ abstract type AbstractRegularizationTerm end
 #include("functions/NormL21.jl")
 
 include("utilities/IterationTools.jl")
+include("utilities/BatchMul.jl")
 
 include("SDDenoise.jl")
 include("Util.jl")
