@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.12.7
+# v0.12.9
 
 using Markdown
 using InteractiveUtils
@@ -20,7 +20,7 @@ using ImageQualityIndexes, ImageContrastAdjustment, ImageShow
 using ImageTools.Gradient
 
 # ╔═╡ be3b79a2-22a8-11eb-24f6-2f469ff92a30
-using LinearAlgebra
+using LinearAlgebra, SparseArrays
 
 # ╔═╡ 32b60ce0-1fa0-11eb-29d3-1d3df6525a7d
 md"""
@@ -46,10 +46,10 @@ md" To perform this optimal parameter search we will make use a nonsmooth trust 
 # ╔═╡ 9d090074-1fa1-11eb-2aab-89fa5e07012f
 function tr_function(α, img, noisy)
 	u = TVl₂Denoising(noisy,α)
-	u_ = TVl₂Denoising(noisy,α+1e-6)
+	u_ = TVl₂Denoising(noisy,α+1e-8)
 	c = 0.5*norm₂²(u-img)
 	c_ = 0.5*norm₂²(u_-img)
-	g = (c_-c)/1e-6
+	g = (c_-c)/1e-8
 	return (u=u,c=c,g=g)
 end
 
@@ -92,6 +92,63 @@ Now, let us use the optimality system obtained for the bilevel problem described
 
 """
 
+# ╔═╡ 51e28cde-2436-11eb-0bc6-b5a6f526e750
+function createDivMatrix(n)
+	Hx = spdiagm(-1=>-ones(n-1),1=>ones(n-1))
+	Gx = kron(spdiagm(0=>ones(n)),Hx)
+	Gy = spdiagm(-n=>-ones(n^2-n),n=>ones(n^2-n))
+	return [Gx;Gy]
+end
+
+# ╔═╡ a498b36e-2435-11eb-3a71-35cf75148911
+A = createDivMatrix(3)
+
+# ╔═╡ bfccd358-2436-11eb-0dd0-bd91b7816749
+spy(A)
+
+# ╔═╡ 64345a82-2438-11eb-19fc-a5bcd3c6207b
+function prodesc(q,p)
+	n=Int(size(q,1)/2)
+	q1=q[1:n]
+	q2=q[n+1:2*n]
+
+	p1=p[1:n]
+	p2=p[n+1:2*n]
+
+	return [spdiagm(0=>p1.*q1) spdiagm(0=>p2.*q1);
+		  spdiagm(0=>p1.*q2) spdiagm(0=>p2.*q2)]
+end
+
+# ╔═╡ 2d6b340e-2435-11eb-193b-8f9600fcf433
+function gradient(α,u,ū)
+	# Obtain Active and inactive sets
+	Ku = zeros(2,size(u)...)
+	∇₂!(Ku,u)
+	nKu = sqrt.(Ku[1,:,:].^2 + Ku[2,:,:].^2)
+	inact = nKu .> 1e-5
+	act = 1 .- inact
+	Inact = spdiagm(0=>inact[:])
+	Act = spdiagm(0=>act[:])
+	
+	# Vector with grad norm in inactive components and one in the active
+	den = Inact*nKu[:] + act[:]
+	
+	# Generate centered gradient matrix
+	M,N = size(u)
+	n = M*N
+	G = createDivMatrix(n)
+	
+	# prod KuKuᵗ/norm³
+	Gu = G*u[:]
+	prodKuKu = prodesc(Gu ./(den.^3),Gu)
+	
+	Adj = [spdiagm(0=>ones(n)) α*G]
+	return Adj
+end
+
+# ╔═╡ edf4c032-2439-11eb-1112-0f6d53f462c7
+A1 = gradient(0.1,noisy,img)
+
 # ╔═╡ 39135c0e-2370-11eb-30d2-99637f8643f8
 function T(Ku,invnKu,v)
 	invnKu³ = invnKu.^3
@@ -113,7 +170,7 @@ function S2(x,y,Ku,invnKu,Inact,Act;ϵ=0.01)
 end
 
 # ╔═╡ f883545c-2052-11eb-3ab3-27e0e9627e58
-function gradient(α,u,ū;maxiter=10) #Uzawa for saddle point problems
+function gradient_uzawa(α,u,ū;maxiter=10) #Uzawa for saddle point problems
 	Ku = zeros(2,size(u)...)
 	Kuū = zeros(2,size(u)...)
 	∇₂!(Ku,u)
@@ -149,74 +206,11 @@ function S(α,x,Ku,invnKu,Inact,Act;ϵ=10.1)
 	return α*batchmul(KKᵗx,Act) - α*batchmul(TKKᵗx,Inact) - batchmul(x,(Inact + ϵ*Act))
 end
 
-# ╔═╡ 672e80c2-229d-11eb-1394-33df6473733d
-function gradient2(α,u,ū)
-	b = zeros(2,size(u)...)
-	∇₂!(b,u-ū)
-	
-	Ku = zeros(size(b))
-	KtKu = zeros(size(u))
-	∇₂!(Ku,u)
-	nKu = sqrt.(Ku[1,:,:].^2 + Ku[2,:,:].^2)
-	Inact = nKu .> 1e-7
-	Act = 1 .-Inact
-	invnKu = 1 ./(Inact .*nKu .+ Act)
-	batchmul!(Ku,Ku,Inact .*invnKu)
-	∇₂ᵀ!(KtKu,Ku)
-	
-	# Conjugate gradient
-	x = zeros(2,size(u)...)
-	
-	for i = 1:256
-		Ax = S(α,x,Ku,invnKu,Inact,Act)
-		r = b-Ax
-		p = r
-		Ap = S(α,p,Ku,invnKu,Inact,Act)
-		alpha = (r[:]'*r[:])/(p[:]'*Ap[:])
-		x += alpha * p
-		r_ = r - alpha * Ap
-		if norm(r_[:])<1e-6
-			println("cg[$i] r_=$(norm(r_[:]))")
-			break
-		end
-		println("cg[$i] r_=$(norm(r_[:]))")
-		beta = (r_[:]'*r_[:])/(r[:]'*r[:])
-		p += r_ + beta * p
-		r = r_
-	end
-	Ktx = zeros(size(u))
-	∇₂ᵀ!(Ktx,x)
-	y = -α*Ktx - u + ū
-		
-	return y[:]'*(Inact .*KtKu)[:]
-end
-
-# ╔═╡ cef41040-23cc-11eb-2c9c-1759719676f4
-function gradient3(α,u,ū;maxiter=100)
-	Ku = zeros(2,size(u)...)
-	∇₂!(Ku,u)
-	KtKu = zeros(size(u))
-	∇₂ᵀ!(KtKu,Ku)
-	
-	y = zeros(2,size(u)...)
-	x = zeros(size(u))
-	Δx = zeros(size(u))
-	Δy = zeros(size(y))
-	for i = 1:maxiter
-		∇₂ᵀ!(Δx,y)	
-		x = ū-u-α*Δx
-		∇₂!(Δy,x)
-		y += 0.01*Δy
-	end
-	return x[:]'*(KtKu)[:]
-end
-	
-
 # ╔═╡ 19af755e-2053-11eb-0fe8-9f10affcdbb2
 function os_tr_function(α,img,noisy)
 	u = TVl₂Denoising(noisy,α)
 	c = 0.5*norm₂²(u-img)
-	g = gradient3(α,u,img)
+	g = -1.0#gradient3(α,u,img)
 	return (u=u,c=c,g=g)
 end
 
@@ -259,10 +253,14 @@ os_approx = os_tr_function(αtest,img,noisy)
 # ╠═ec6d509e-2392-11eb-1ac3-05879bb31a36
 # ╠═f883545c-2052-11eb-3ab3-27e0e9627e58
 # ╠═be3b79a2-22a8-11eb-24f6-2f469ff92a30
+# ╠═a498b36e-2435-11eb-3a71-35cf75148911
+# ╠═bfccd358-2436-11eb-0dd0-bd91b7816749
+# ╠═51e28cde-2436-11eb-0bc6-b5a6f526e750
+# ╠═64345a82-2438-11eb-19fc-a5bcd3c6207b
+# ╠═2d6b340e-2435-11eb-193b-8f9600fcf433
+# ╠═edf4c032-2439-11eb-1112-0f6d53f462c7
 # ╠═39135c0e-2370-11eb-30d2-99637f8643f8
 # ╠═7c46e6aa-2369-11eb-1892-ebb1d305b956
-# ╠═672e80c2-229d-11eb-1394-33df6473733d
-# ╠═cef41040-23cc-11eb-2c9c-1759719676f4
 # ╠═19af755e-2053-11eb-0fe8-9f10affcdbb2
 # ╠═4da59ad0-2053-11eb-3cf9-c74b460c7a9d
 # ╠═682c9bba-2053-11eb-1031-a59210db816b
