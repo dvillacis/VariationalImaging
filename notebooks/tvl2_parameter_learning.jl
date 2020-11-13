@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.12.9
+# v0.12.10
 
 using Markdown
 using InteractiveUtils
@@ -130,10 +130,12 @@ function gradient(α,u,ū)
 	ū = Float64.(Gray{Float64}.(ū))
 	# Obtain Active and inactive sets
 	n = size(u,1)
+	
+	# Generate centered gradient matrix
 	G = createDivMatrix(n)
 	Gu = G*u[:]
 	nGu = xi(Gu)
-	act = nGu .< 1e-3
+	act = nGu .< 1e-12
 	inact = 1 .- act
 	Act = spdiagm(0=>act)
 	Inact = spdiagm(0=>inact)
@@ -142,24 +144,16 @@ function gradient(α,u,ū)
 	den = Inact*nGu+act
 	Den = spdiagm(0=>1 ./den)
 	
-	# Generate centered gradient matrix
-	
-	
 	# prod KuKuᵗ/norm³
 	prodKuKu = prodesc(Gu ./den.^3,Gu)
 	
 	Adj = [spdiagm(0=>ones(n^2)) α*G';
-			Act*G-Inact*(prodKuKu-Den)*G Inact+Act]#+sqrt(eps())*Act]
+			Act*G+Inact*(prodKuKu-Den)*G Inact+sqrt(eps())*Act]
 	
 	Track=[(u[:]-ū[:]);zeros(2*n^2)]
 	@time mult = Adj\Track
-	println("res = $(norm(Adj*mult-Track))")
 	p = @view mult[1:n^2]
-	#KᵗKu = zeros(size(u))
-	#∇₂ᵀ!(KᵗKu,batchmul(Ku,den))
-	#t = inact .* KᵗKu
-	#return -sum(p .*t[:])
-	return -p'*(Inact*G'*Gu)
+	return -p'*(G'*Inact*Den*Gu)
 end
 
 # ╔═╡ 39135c0e-2370-11eb-30d2-99637f8643f8
@@ -229,22 +223,7 @@ function os_tr_function(α,img,noisy)
 end
 
 # ╔═╡ 4da59ad0-2053-11eb-3cf9-c74b460c7a9d
-αtest = 1.8
-
-# ╔═╡ a8b83696-246b-11eb-3eb9-a3125db0e32e
-u = TVl₂Denoising(noisy,αtest)
-
-# ╔═╡ b2c5575e-246b-11eb-1429-01c420948f4f
-begin 
-	Ku = zeros(2,size(u)...)
-	∇₂!(Ku,u)
-end
-
-# ╔═╡ f33d79e2-246b-11eb-255e-219a15ca856f
-nKu = sqrt.(Ku[1,:,:].^2 + Ku[2,:,:].^2)
-
-# ╔═╡ f9cd36d0-246b-11eb-14e4-0d42b8a948d5
-sum(nKu .== 0)
+αtest = 20.1
 
 # ╔═╡ 682c9bba-2053-11eb-1031-a59210db816b
 fd_approx = tr_function(αtest,img,noisy)
@@ -252,29 +231,14 @@ fd_approx = tr_function(αtest,img,noisy)
 # ╔═╡ b70ef3c2-2053-11eb-3a6e-0fc254c1b5cd
 os_approx = os_tr_function(αtest,img,noisy)
 
-# ╔═╡ a1a0f0fa-2455-11eb-3d7d-830f004b3220
-αrange2 = 0.001:0.05:0.4
-
-# ╔═╡ b4c5a5ba-2455-11eb-100d-7dd110c9c04b
-#fd_grad = [tr_function(i,img,noisy).g for i ∈ αrange2]
-
-# ╔═╡ d9675fda-2455-11eb-04a5-bd9b39aa4bf2
-#os_grad = [os_tr_function(i,img,noisy).g for i ∈ αrange2]
-
-# ╔═╡ e4e2c3ea-2455-11eb-10b3-35d766ac4a92
-#begin
-	#plot(αrange2,fd_grad,label="fd")
-#	plot(αrange2,os_grad,label="os")
-#end
-
 # ╔═╡ 4a26c068-2077-11eb-2946-21d3654fcca5
-#opt_os,fx_os,res_os,iters_os = solver(x->os_tr_function(x,img,noisy),2.1)
+opt_os,fx_os,res_os,iters_os = solver(x->os_tr_function(x,img,noisy),x₀)
 
 # ╔═╡ 86f6b782-2077-11eb-1c8b-2ffbd1660c03
-#Gray.([img noisy adjust_histogram(fx_os.u,LinearStretching())])
+Gray.([img noisy adjust_histogram(fx_os.u,LinearStretching())])
 
 # ╔═╡ a7f9929c-2077-11eb-30df-5de48fd58ace
-#[assess_ssim(img,noisy) assess_ssim(img,adjust_histogram(fx_os.u,LinearStretching()))]
+[assess_ssim(img,noisy) assess_ssim(img,adjust_histogram(fx_os.u,LinearStretching()))]
 
 # ╔═╡ Cell order:
 # ╟─32b60ce0-1fa0-11eb-29d3-1d3df6525a7d
@@ -305,16 +269,8 @@ os_approx = os_tr_function(αtest,img,noisy)
 # ╠═7c46e6aa-2369-11eb-1892-ebb1d305b956
 # ╠═19af755e-2053-11eb-0fe8-9f10affcdbb2
 # ╠═4da59ad0-2053-11eb-3cf9-c74b460c7a9d
-# ╠═a8b83696-246b-11eb-3eb9-a3125db0e32e
-# ╠═b2c5575e-246b-11eb-1429-01c420948f4f
-# ╠═f33d79e2-246b-11eb-255e-219a15ca856f
-# ╠═f9cd36d0-246b-11eb-14e4-0d42b8a948d5
 # ╠═682c9bba-2053-11eb-1031-a59210db816b
 # ╠═b70ef3c2-2053-11eb-3a6e-0fc254c1b5cd
-# ╠═a1a0f0fa-2455-11eb-3d7d-830f004b3220
-# ╠═b4c5a5ba-2455-11eb-100d-7dd110c9c04b
-# ╠═d9675fda-2455-11eb-04a5-bd9b39aa4bf2
-# ╠═e4e2c3ea-2455-11eb-10b3-35d766ac4a92
 # ╠═4a26c068-2077-11eb-2946-21d3654fcca5
 # ╠═86f6b782-2077-11eb-1c8b-2ffbd1660c03
 # ╠═a7f9929c-2077-11eb-30df-5de48fd58ace
