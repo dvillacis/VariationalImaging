@@ -83,16 +83,18 @@ end
 
 function Base.iterate(iter::NSTR_iterable{R}, state::NSTR_state) where {R}
     
-    model = TrustRegionModel(state.fx.g,state.B)
+    model = TrustRegionModel(state.fx.g[:],state.B)
     p,p_norm,on_boundary = solve_model(state.Δ,model)
-    x̄ = state.x .+ p
+    x̄ = state.x + reshape(p,size(state.x))
+    #println("x=$(state.x)")
     fx̄ = iter.f(x̄)
     state.ρ = reduction_ratio(model,p,state.fx,fx̄)
     
     # update SR1 matrix
-    y = fx̄.g-state.fx.g
-    s = x̄-state.x
-    if isnan(y)
+    #println("$x̄, $(fx̄.g), $(state.fx.g)")
+    y = fx̄.g[:]-state.fx.g[:]
+    s = x̄[:]-state.x[:]
+    if any(isnan.(y))
         @error "Error in gradient calculation"
         state.error_flag=true
     end

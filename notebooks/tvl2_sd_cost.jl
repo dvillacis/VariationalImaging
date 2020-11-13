@@ -77,16 +77,16 @@ Now, we restrict ourselves to a two dimensional parameter on the splitted image,
 x= αrange; y= αrange;
 
 # ╔═╡ 8747702c-2555-11eb-0e1a-31ed49854486
-z = [0.5*norm₂²(img-TVl₂Denoising(noisy,patch([i j],img))) for i ∈ x,j ∈ y]
+#z = [0.5*norm₂²(img-TVl₂Denoising(noisy,patch([i j],img))) for i ∈ x,j ∈ y]
 
 # ╔═╡ 26f18cfa-2553-11eb-39ab-13388faaba67
-contour(x,y,z)
+#contour(x,y,z)
 
 # ╔═╡ aceff5bc-2553-11eb-30d8-452eee5bcce7
-contourf(x,y,z)
+#contourf(x,y,z)
 
 # ╔═╡ 3f3c2084-255a-11eb-39aa-8b28ea411db0
-save("pd_lena_cost_function.jld2","α₁",x,"α₂",y,"costs",z)
+#save("pd_lena_cost_function.jld2","α₁",x,"α₂",y,"costs",z)
 
 # ╔═╡ Cell order:
 # ╟─c109c2a6-2525-11eb-2425-b784e711b843

@@ -19,7 +19,7 @@ abstract type AbstractDataTerm end
 abstract type AbstractRegularizationTerm end
 
 # Write your package code here.
-#include("operators/Gradient.jl")
+include("operators/PatchOperator.jl")
 
 #include("functions/L2DataTerm.jl")
 #include("functions/NormL21.jl")
@@ -33,6 +33,7 @@ include("Util.jl")
 #include("solvers/PDHG.jl")
 
 #include("bilevel_learning/L2UpperLevelCost.jl")
+include("bilevel_learning/MatrixUtils.jl")
 include("bilevel_learning/NSTR.jl")
 
 export prox!, cprox!
