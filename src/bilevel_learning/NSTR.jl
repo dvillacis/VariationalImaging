@@ -56,7 +56,7 @@ end
 function cauchy_point(Δ,model)
     t = 0
     gᵗBg = model.g'*(model.B*model.g)
-    if gᵗBg ≤ 0
+    if gᵗBg ≤ 0 # Negative curvature detected
         t = Δ/norm(model.g)
     else
         t = min(norm(model.g)^2/gᵗBg,Δ/norm(model.g))
@@ -64,6 +64,22 @@ function cauchy_point(Δ,model)
     return -t*model.g
 end
 
+function cauchy_point_box(state,model)
+    # t = 0
+    # gᵗBg = model.g'*(model.B*model.g)
+    # if gᵗBg ≤ 0 # Negative curvature detected
+    #     t = Δ *sign.(model.g)
+    # else
+    #     t = min(norm(model.g)^2/gᵗBg,Δ/norm(model.g))
+    # end
+    #return -t*model.g
+    nz = findall(abs.(model.g) .> 0)
+    gnz = -model.g[nz]
+    step = state.Δ .* ones(size(model.g))
+    lb = max.(-state.x,-state.Δ)
+    step[nz] .= max(lb[nz] ./ gnz,state.Δ ./ gnz)
+    return -step .*model.g
+end
 
 function solve_model(Δ,model)
     pU,pU_norm = unconstrained_optimum(model)
@@ -72,6 +88,16 @@ function solve_model(Δ,model)
     else
         pC = cauchy_point(Δ,model)
         return pC,norm(pC,2),false
+    end
+end
+
+function solve_model_box(state,model)
+    pU,pU_norm = unconstrained_optimum(model)
+    if norm(pU,Inf) ≤ state.Δ
+        return pU,pU_norm,false
+    else
+        pC = cauchy_point_box(state,model)
+        return pC,norm(pC,Inf),false
     end
 end
 
@@ -84,7 +110,7 @@ end
 function Base.iterate(iter::NSTR_iterable{R}, state::NSTR_state) where {R}
     
     model = TrustRegionModel(state.fx.g[:],state.B)
-    p,p_norm,on_boundary = solve_model(state.Δ,model)
+    p,p_norm,on_boundary = solve_model_box(state,model)
     x̄ = state.x + reshape(p,size(state.x))
     #println("x=$(state.x)")
     fx̄ = iter.f(x̄)
@@ -150,7 +176,17 @@ struct NSTR{R}
     end
 end
 
-function (solver::NSTR{R})(f,x₀::Real;η=0.1,Δ₀=0.1) where {R}
+"""
+solver(NSTR{R})(f,x₀)
+
+Non-smooth trust region solver for problems with box constraints.
+
+This algorithm takes an evaluation function that has to return a tuple (u,c,g) including 
+the current point u, the cost at the evaluation point c and the function gradient g.
+x₀ is a mandatory initial value. Finally, it is optional to specify the box contraints bounds
+that will be used for a in a reflective strategy as described in [X].
+"""
+function (solver::NSTR{R})(f,x₀::Real;η=0.1,Δ₀=0.1,xmin=1e-8,xmax=Inf) where {R}
     stop(state::NSTR_state) = state.res <= solver.tol || state.Δ ≤  solver.tol || state.error_flag == true
     @printf("iter | x | cost | grad | radius | ρ\n")
     disp((it,state)) = @printf(
@@ -173,16 +209,17 @@ function (solver::NSTR{R})(f,x₀::Real;η=0.1,Δ₀=0.1) where {R}
     return state_final.x,state_final.fx,state_final.res,num_iters
 end
 
-function (solver::NSTR{R})(f,x₀::AbstractArray{T};η=0.1,Δ₀=0.1) where {R,T}
+function (solver::NSTR{R})(f,x₀::AbstractArray{T};η=0.1,Δ₀=0.1,xmin=1e-8,xmax=Inf) where {R,T}
     stop(state::NSTR_state) = state.res <= solver.tol || state.Δ ≤  solver.tol || state.error_flag == true
-    @printf("iter | x | cost | grad | radius\n")
+    @printf("iter | x | cost | grad | radius | ρ \n")
     disp((it,state)) = @printf(
-        "%4d | %.3e | %.3e | %.3e | %.3e\n",
+        "%4d | %.3e | %.3e | %.3e | %.3e | %.3e\n",
         it,
         norm(state.x),
         state.fx.c,
         norm(state.fx.g),
-        state.Δ
+        state.Δ,
+        state.ρ
     )
     iter = NSTR_iterable(f,x₀,η,Δ₀)
     iter = take(halt(iter,stop),solver.maxit)
