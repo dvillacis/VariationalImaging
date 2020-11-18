@@ -44,24 +44,24 @@ function Base.iterate(iter::NSTR_iterable)
     return state,state
 end
 
-function unconstrained_optimum(model)
-    if isa(model.B,LSR1Operator)
-        p,_ = cg(model.B,-model.g) # TODO B puede estar mal condicionada
-    else
-        p = -model.B\model.g
-    end
+function unconstrained_optimum(g,B::Real)
+    p = -B\g
+    return p, norm(p,2)
+end
+function unconstrained_optimum(g,B::LSR1Operator)
+    p,_ = cg(B,-g) # TODO B puede estar mal condicionada
     return p, norm(p,2)
 end
 
-function cauchy_point(Δ,model)
+function cauchy_point(Δ,g,B)
     t = 0
-    gᵗBg = model.g'*(model.B*model.g)
+    gᵗBg = g'*(B*g)
     if gᵗBg ≤ 0 # Negative curvature detected
-        t = Δ/norm(model.g)
+        t = Δ/norm(g)
     else
-        t = min(norm(model.g)^2/gᵗBg,Δ/norm(model.g))
+        t = min(norm(g)^2/gᵗBg,Δ/norm(g))
     end
-    return -t*model.g
+    return -t*g
 end
 
 function cauchy_point_box(state,model,gᵗBg,lb)
@@ -70,20 +70,36 @@ function cauchy_point_box(state,model,gᵗBg,lb)
     gnz = -model.g[nz]
     s = zeros(size(state.x[:]))
     s[nz] = max.(lb[nz] ./ gnz, state.Δ ./ gnz)
-    if gᵗBg > 0 # Positive curvature detected
-        s = min.(norm(model.g)^2/gᵗBg,s)
-    end
+    # if gᵗBg > 0 # Positive curvature detected
+    #     s = min.(norm(model.g)^2/gᵗBg,s)
+    # end
     return -s .*model.g
 end
 
 function solve_model(Δ,model)
-    pU,pU_norm = unconstrained_optimum(model)
+    pU,pU_norm = unconstrained_optimum(model.g,model.B)
     if pU_norm ≤ Δ
+        println("Newton")
         return pU,pU_norm,false
     else
-        pC = cauchy_point(Δ,model)
+        println("Cauchy")
+        pC = cauchy_point(Δ,model.g,model.B)
         return pC,norm(pC,2),false
     end
+end
+
+function solve_model_constrained(state,model,D)
+    # pU,pU_norm = unconstrained_optimum(model.g,model.B)
+    # if pU_norm ≤ state.Δ
+    #     println("Newton")
+    #     return pU,pU_norm,false
+    # else
+    #     println("Cauchy")
+    #     pC = cauchy_point(state.Δ,D*model.g,model.B)
+    #     return pC,norm(pC,2),false
+    # end
+    pC = cauchy_point(state.Δ,D*model.g,model.B)
+    return pC,norm(pC,2),false
 end
 
 function solve_model_box(state,model)
@@ -113,10 +129,16 @@ function reduction_ratio(model,p,fx,fx̄)
 end
 
 function Base.iterate(iter::NSTR_iterable{R}, state::NSTR_state) where {R}
+
+    d = ones(size(state.fx.g[:]))
+    pos = findall(state.fx.g[:] .>= 0)
+    r = state.x[:] .- eps()
+    d[pos] = r[pos]
+    D = Diagonal(d)^-0.5
     
     model = TrustRegionModel(state.fx.g[:],state.B)
     #p,p_norm,on_boundary = solve_model(state.Δ,model)
-    p,p_norm,on_boundary = solve_model_box(state,model)
+    p,p_norm,on_boundary = solve_model_constrained(state,model,D)
     x̄ = state.x + reshape(p,size(state.x))
     #println("x=$(state.x)")
     fx̄ = iter.f(x̄)
@@ -159,7 +181,7 @@ function Base.iterate(iter::NSTR_iterable{R}, state::NSTR_state) where {R}
         state.Δ = Δ̄
     end
 
-    state.res = norm(state.fx.g)
+    state.res = norm(D^-2 * state.fx.g[:])
     
     return state,state
 end
