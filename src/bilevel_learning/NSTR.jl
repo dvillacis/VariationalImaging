@@ -64,21 +64,18 @@ function cauchy_point(Δ,model)
     return -t*model.g
 end
 
-function cauchy_point_box(state,model)
-    # t = 0
-    # gᵗBg = model.g'*(model.B*model.g)
-    # if gᵗBg ≤ 0 # Negative curvature detected
-    #     t = Δ *sign.(model.g)
-    # else
-    #     t = min(norm(model.g)^2/gᵗBg,Δ/norm(model.g))
-    # end
-    #return -t*model.g
-    nz = findall(abs.(model.g) .> 0)
+function cauchy_point_box(state,model,gᵗBg,lb)
+    t = 0
+    nz = findall(!iszero,-model.g)
     gnz = -model.g[nz]
-    step = state.Δ .* ones(size(model.g))
-    lb = max.(-state.x,-state.Δ)
-    step[nz] .= max(lb[nz] ./ gnz,state.Δ ./ gnz)
-    return -step .*model.g
+    s = Inf .* ones(size(state.x[:]))
+    s[nz] = max.(lb[nz] ./ gnz, state.Δ ./ gnz)
+    if gᵗBg ≤ 0 # Negative curvature detected
+        t = minimum(s)
+    else
+        t = min(norm(model.g)^2/gᵗBg,minimum(s))
+    end
+    return -t*model.g
 end
 
 function solve_model(Δ,model)
@@ -92,13 +89,23 @@ function solve_model(Δ,model)
 end
 
 function solve_model_box(state,model)
-    pU,pU_norm = unconstrained_optimum(model)
-    if norm(pU,Inf) ≤ state.Δ
-        return pU,pU_norm,false
-    else
-        pC = cauchy_point_box(state,model)
-        return pC,norm(pC,Inf),false
-    end
+    gᵗBg = model.g'*(model.B*model.g)
+    lb = max.(sqrt(eps()) .-state.x[:],-state.Δ)
+    # if gᵗBg > 0
+    #     pU,pU_norm = unconstrained_optimum(model)
+    #     if sum(pU .< lb) == 0
+    #         println("Taking newton")
+    #         return pU,pU_norm,false
+    #     else
+    #         pC = cauchy_point_box(state,model,gᵗBg,lb)
+    #         return pC,norm(pC,Inf),false
+    #     end
+    # else
+    #     pC = cauchy_point_box(state,model,gᵗBg,lb)
+    #     return pC,norm(pC,Inf),false
+    # end
+    pC = cauchy_point_box(state,model,gᵗBg,lb)
+    return pC,norm(pC,Inf),false
 end
 
 function reduction_ratio(model,p,fx,fx̄)
@@ -115,6 +122,9 @@ function Base.iterate(iter::NSTR_iterable{R}, state::NSTR_state) where {R}
     #println("x=$(state.x)")
     fx̄ = iter.f(x̄)
     state.ρ = reduction_ratio(model,p,state.fx,fx̄)
+    if isnan(state.ρ)
+        state.ρ = 0
+    end
     
     # update SR1 matrix
     #println("$x̄, $(fx̄.g), $(state.fx.g)")
