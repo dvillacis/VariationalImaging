@@ -65,17 +65,15 @@ function cauchy_point(Δ,model)
 end
 
 function cauchy_point_box(state,model,gᵗBg,lb)
-    t = 0
+    #t = 0
     nz = findall(!iszero,-model.g)
     gnz = -model.g[nz]
-    s = Inf .* ones(size(state.x[:]))
+    s = zeros(size(state.x[:]))
     s[nz] = max.(lb[nz] ./ gnz, state.Δ ./ gnz)
-    if gᵗBg ≤ 0 # Negative curvature detected
-        t = minimum(s)
-    else
-        t = min(norm(model.g)^2/gᵗBg,minimum(s))
+    if gᵗBg > 0 # Positive curvature detected
+        s = min.(norm(model.g)^2/gᵗBg,s)
     end
-    return -t*model.g
+    return -s .*model.g
 end
 
 function solve_model(Δ,model)
@@ -117,6 +115,7 @@ end
 function Base.iterate(iter::NSTR_iterable{R}, state::NSTR_state) where {R}
     
     model = TrustRegionModel(state.fx.g[:],state.B)
+    #p,p_norm,on_boundary = solve_model(state.Δ,model)
     p,p_norm,on_boundary = solve_model_box(state,model)
     x̄ = state.x + reshape(p,size(state.x))
     #println("x=$(state.x)")
