@@ -38,7 +38,7 @@ function Base.iterate(iter::NSTR_iterable)
     else
         B = 0.1
     end
-    res = 1.0
+    res = norm(fx.g[:],2)
     ρ = 0.0
     state = NSTR_state(x,Δ,fx,B,res,ρ,false)
     return state,state
@@ -53,14 +53,6 @@ function unconstrained_optimum(g,B::LSR1Operator)
     return p, norm(p,2)
 end
 
-function in_bounds(x,lb,ub)
-    if length(findall(x .< lb))==0 && length(findall(x .> ub))==0
-        return true
-    else
-        return false
-    end
-end
-
 function cauchy_point(Δ,g,B)
     t = 0
     gᵗBg = g'*(B*g)
@@ -72,59 +64,55 @@ function cauchy_point(Δ,g,B)
     return -t*g
 end
 
-function cauchy_point_box(state,model,gᵗBg,lb)
-    #t = 0
-    nz = findall(!iszero,-model.g)
-    gnz = -model.g[nz]
-    s = zeros(size(state.x[:]))
-    s[nz] = max.(lb[nz] ./ gnz, state.Δ ./ gnz)
-    if gᵗBg > 0 # Positive curvature detected
-        s = min.(norm(model.g)^2/gᵗBg,s)
-    end
-    return -s .*model.g
+function find_intersection(x,Δ)
+    lb_total = max.(eps().-x, -Δ)
+    return lb_total,Δ*ones(size(x))
 end
 
-function newton_point_box(state,model,gᵗBg,lb)
-    pU,pU_norm = unconstrained_optimum(model.g,model.B)
-    pN = pU + state.x[:]
-    clamp!(pN,eps(),Inf)
-    σ = max(0.995,1-norm(pN-state.x[:],2))
-    pN = σ * (pN - state.x[:])
-    if in_bounds(pN,minimum(lb),state.Δ)
-        println("Newton")
-        return pN,norm(pN,2),false
-    else
-        println("Cauchy")
-        pC = cauchy_point_box(state,model,gᵗBg,lb)
-        return pC,norm(pC,2),false
-    end
+# L∞ bound check
+function in_bounds(x,lb,ub)
+    return all(x .>= lb) & all(x .<= ub)
 end
+
+function step_size_to_bound(x,s,lb,ub)
+    nz = findall(!iszero,s)
+    snz = s[nz]
+    steps = Inf .* ones(size(x))
+    steps[nz] = max.((lb - x)[nz] ./snz, (ub - x)[nz] ./snz)
+    min_step = minimum(steps[nz])
+    println(steps[nz])
+    return min_step
+end
+
+function cauchy_point_box(x,Δ,g,B,lb,ub)
+    to_bounds = step_size_to_bound(zeros(size(x)),-g,lb,ub)
+    #println("to_bounds=$to_bounds, g=$g")
+    return -to_bounds*g
+end
+
 
 function solve_model(Δ,model)
     pU,pU_norm = unconstrained_optimum(model.g,model.B)
-    if pU_norm ≤ Δ
+    if pU_norm ≤ state.Δ
+        println("Newton")
         return pU,pU_norm,false
     else
+        println("Cauchy")
         pC = cauchy_point(Δ,model.g,model.B)
         return pC,norm(pC,2),false
     end
 end
 
-function solve_model_constrained(state,model,D)
-    t = 0
-    thres = minimum(state.x[:] ./ (D*model.g))
-    gᵗBg = model.g'*(D*model.B*D*model.g)
-    if gᵗBg ≤ 0 # Negative curvature detected
-        t = state.Δ/norm(D * model.g)
+function solve_model_constrained(state,model)
+    lb,ub = find_intersection(state.x[:],state.Δ)
+    pU,pU_norm = unconstrained_optimum(model.g,model.B)
+    if in_bounds(pU,lb,ub)
+        println("Newton")
+        return pU,pU_norm,false
     else
-        t = min((model.g'*D*model.g)/gᵗBg,state.Δ/norm(D*model.g))
+        pC = cauchy_point_box(state.x[:],state.Δ,model.g,model.B,lb,ub)
+        return pC,norm(pC,2),false
     end
-    println("t=$t, thres=$thres")
-    # if t > thres
-    #     t = 0.5*t
-    # end
-    s = -t*D*model.g
-    return s,norm(s,2),false
 end
 
 function reduction_ratio(model,p,fx,fx̄)
@@ -133,24 +121,14 @@ function reduction_ratio(model,p,fx,fx̄)
     return ared/pred
 end
 
-function reduction_ratio_constrained(model,p,fx,fx̄)
-    pred = - p'*model.g - 0.5*p'*(model.B*p)
-    ared = fx.c - fx̄.c
-    return ared/pred
-end
-
 function Base.iterate(iter::NSTR_iterable{R}, state::NSTR_state) where {R}
-
-    d = ones(size(state.fx.g[:]))
-    pos = findall(state.fx.g[:] .≥ 0)
-    d[pos] = (state.x[:])[pos]
-    D = Diagonal(d)
 
     model = TrustRegionModel(state.fx.g[:],state.B)
     #p,p_norm,on_boundary = solve_model(state.Δ,model)
-    p,p_norm,on_boundary = solve_model_constrained(state,model,D)
+    p,p_norm,on_boundary = solve_model_constrained(state,model)
+    println(p)
     x̄ = state.x + reshape(p,size(state.x))
-    #println("x=$(state.x)")
+    #println("x̄=$x̄")
     fx̄ = iter.f(x̄)
     state.ρ = reduction_ratio(model,p,state.fx,fx̄)
     if isnan(state.ρ)
@@ -191,7 +169,7 @@ function Base.iterate(iter::NSTR_iterable{R}, state::NSTR_state) where {R}
         state.Δ = Δ̄
     end
 
-    state.res = norm(D^-0.5 * state.fx.g[:],2)
+    state.res = norm(state.fx.g[:],2)
     
     return state,state
 end
