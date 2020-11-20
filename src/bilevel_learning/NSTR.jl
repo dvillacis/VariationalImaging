@@ -53,6 +53,14 @@ function unconstrained_optimum(g,B::LSR1Operator)
     return p, norm(p,2)
 end
 
+function in_bounds(x,lb,ub)
+    if length(findall(x .< lb))==0 && length(findall(x .> ub))==0
+        return true
+    else
+        return false
+    end
+end
+
 function cauchy_point(Δ,g,B)
     t = 0
     gᵗBg = g'*(B*g)
@@ -70,56 +78,53 @@ function cauchy_point_box(state,model,gᵗBg,lb)
     gnz = -model.g[nz]
     s = zeros(size(state.x[:]))
     s[nz] = max.(lb[nz] ./ gnz, state.Δ ./ gnz)
-    # if gᵗBg > 0 # Positive curvature detected
-    #     s = min.(norm(model.g)^2/gᵗBg,s)
-    # end
+    if gᵗBg > 0 # Positive curvature detected
+        s = min.(norm(model.g)^2/gᵗBg,s)
+    end
     return -s .*model.g
+end
+
+function newton_point_box(state,model,gᵗBg,lb)
+    pU,pU_norm = unconstrained_optimum(model.g,model.B)
+    pN = pU + state.x[:]
+    clamp!(pN,eps(),Inf)
+    σ = max(0.995,1-norm(pN-state.x[:],2))
+    pN = σ * (pN - state.x[:])
+    if in_bounds(pN,minimum(lb),state.Δ)
+        println("Newton")
+        return pN,norm(pN,2),false
+    else
+        println("Cauchy")
+        pC = cauchy_point_box(state,model,gᵗBg,lb)
+        return pC,norm(pC,2),false
+    end
 end
 
 function solve_model(Δ,model)
     pU,pU_norm = unconstrained_optimum(model.g,model.B)
     if pU_norm ≤ Δ
-        println("Newton")
         return pU,pU_norm,false
     else
-        println("Cauchy")
         pC = cauchy_point(Δ,model.g,model.B)
         return pC,norm(pC,2),false
     end
 end
 
 function solve_model_constrained(state,model,D)
-    # pU,pU_norm = unconstrained_optimum(model.g,model.B)
-    # if pU_norm ≤ state.Δ
-    #     println("Newton")
-    #     return pU,pU_norm,false
-    # else
-    #     println("Cauchy")
-    #     pC = cauchy_point(state.Δ,D*model.g,model.B)
-    #     return pC,norm(pC,2),false
+    t = 0
+    thres = minimum(state.x[:] ./ (D*model.g))
+    gᵗBg = model.g'*(D*model.B*D*model.g)
+    if gᵗBg ≤ 0 # Negative curvature detected
+        t = state.Δ/norm(D * model.g)
+    else
+        t = min((model.g'*D*model.g)/gᵗBg,state.Δ/norm(D*model.g))
+    end
+    println("t=$t, thres=$thres")
+    # if t > thres
+    #     t = 0.5*t
     # end
-    pC = cauchy_point(state.Δ,D*model.g,model.B)
-    return pC,norm(pC,2),false
-end
-
-function solve_model_box(state,model)
-    gᵗBg = model.g'*(model.B*model.g)
-    lb = max.(sqrt(eps()) .-state.x[:],-state.Δ)
-    # if gᵗBg > 0
-    #     pU,pU_norm = unconstrained_optimum(model)
-    #     if sum(pU .< lb) == 0
-    #         println("Taking newton")
-    #         return pU,pU_norm,false
-    #     else
-    #         pC = cauchy_point_box(state,model,gᵗBg,lb)
-    #         return pC,norm(pC,Inf),false
-    #     end
-    # else
-    #     pC = cauchy_point_box(state,model,gᵗBg,lb)
-    #     return pC,norm(pC,Inf),false
-    # end
-    pC = cauchy_point_box(state,model,gᵗBg,lb)
-    return pC,norm(pC,Inf),false
+    s = -t*D*model.g
+    return s,norm(s,2),false
 end
 
 function reduction_ratio(model,p,fx,fx̄)
@@ -128,14 +133,19 @@ function reduction_ratio(model,p,fx,fx̄)
     return ared/pred
 end
 
+function reduction_ratio_constrained(model,p,fx,fx̄)
+    pred = - p'*model.g - 0.5*p'*(model.B*p)
+    ared = fx.c - fx̄.c
+    return ared/pred
+end
+
 function Base.iterate(iter::NSTR_iterable{R}, state::NSTR_state) where {R}
 
     d = ones(size(state.fx.g[:]))
-    pos = findall(state.fx.g[:] .>= 0)
-    r = state.x[:] .- eps()
-    d[pos] = r[pos]
-    D = Diagonal(d)^-0.5
-    
+    pos = findall(state.fx.g[:] .≥ 0)
+    d[pos] = (state.x[:])[pos]
+    D = Diagonal(d)
+
     model = TrustRegionModel(state.fx.g[:],state.B)
     #p,p_norm,on_boundary = solve_model(state.Δ,model)
     p,p_norm,on_boundary = solve_model_constrained(state,model,D)
@@ -164,8 +174,8 @@ function Base.iterate(iter::NSTR_iterable{R}, state::NSTR_state) where {R}
 
     # Radius update
     Δ̄ = 
-        if state.ρ < 0.25
-            0.5*state.Δ
+        if state.ρ < 0.1
+            0.25*state.Δ
         elseif state.ρ > 0.75
             min(1e10,2*state.Δ) # Radius update modification for nonsmooth problems
         else
@@ -181,7 +191,7 @@ function Base.iterate(iter::NSTR_iterable{R}, state::NSTR_state) where {R}
         state.Δ = Δ̄
     end
 
-    state.res = norm(D^-2 * state.fx.g[:])
+    state.res = norm(D^-0.5 * state.fx.g[:],2)
     
     return state,state
 end
@@ -225,7 +235,7 @@ function (solver::NSTR{R})(f,x₀::Real;η=0.1,Δ₀=0.1,xmin=1e-8,xmax=Inf) whe
         it,
         norm(state.x),
         state.fx.c,
-        state.fx.g,
+        state.res,
         state.Δ,
         state.ρ
     )
@@ -248,7 +258,7 @@ function (solver::NSTR{R})(f,x₀::AbstractArray{T};η=0.1,Δ₀=0.1,xmin=1e-8,x
         it,
         norm(state.x),
         state.fx.c,
-        norm(state.fx.g),
+        norm(state.res),
         state.Δ,
         state.ρ
     )
