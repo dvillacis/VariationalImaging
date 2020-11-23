@@ -65,7 +65,7 @@ function cauchy_point(Δ,g,B)
 end
 
 function find_intersection(x,Δ)
-    lb_total = max.(eps().-x, -Δ)
+    lb_total = max.(eps() .-x, -Δ)
     return lb_total,Δ*ones(size(x))
 end
 
@@ -78,15 +78,14 @@ function step_size_to_bound(x,s,lb,ub)
     nz = findall(!iszero,s)
     snz = s[nz]
     steps = Inf .* ones(size(x))
-    steps[nz] = max.((lb - x)[nz] ./snz, (ub - x)[nz] ./snz)
+    lbx = lb .-x
+    steps[nz] = max.(lbx[nz] ./snz, (ub .- x)[nz] ./snz)
     min_step = minimum(steps[nz])
-    println(steps[nz])
     return min_step
 end
 
-function cauchy_point_box(x,Δ,g,B,lb,ub)
+function cauchy_point_box(x,g,lb,ub)
     to_bounds = step_size_to_bound(zeros(size(x)),-g,lb,ub)
-    #println("to_bounds=$to_bounds, g=$g")
     return -to_bounds*g
 end
 
@@ -104,15 +103,41 @@ function solve_model(Δ,model)
 end
 
 function solve_model_constrained(state,model)
-    lb,ub = find_intersection(state.x[:],state.Δ)
-    pU,pU_norm = unconstrained_optimum(model.g,model.B)
-    if in_bounds(pU,lb,ub)
-        println("Newton")
-        return pU,pU_norm,false
-    else
-        pC = cauchy_point_box(state.x[:],state.Δ,model.g,model.B,lb,ub)
-        return pC,norm(pC,2),false
-    end
+    x = state.x[:]
+    # Identify the bounds
+    lb,ub = find_intersection(x,state.Δ)
+
+    # Identify Active set
+    on_bound = zeros(size(x))
+    on_lb = findall(abs.(x .-lb) .<= eps())
+    on_ub = findall(abs.(x .-ub) .<= eps())
+    on_bound[on_lb] .= -1
+    on_bound[on_ub] .= 1
+    active_set = on_bound .* model.g .< 0
+    free_set = 1 .- active_set
+    println("x=$x")
+    println("g=$(model.g)")
+    #println("xlb=$(x .-lb)")
+    println("free_set=$free_set")
+    x_free = x .* free_set
+    lb_free = lb .* free_set
+    #println("lb_free = $lb_free")
+    ub_free = ub .* free_set
+    g_free = model.g .* free_set
+
+    pC = cauchy_point_box(x_free,g_free,lb_free,ub_free)
+    #     #println("pC = $pC")
+    return pC,norm(pC,2),false
+
+    # pU,pU_norm = unconstrained_optimum(model.g,model.B)
+    # if in_bounds(pU,lb,ub)
+    #     println("Newton")
+    #     return pU,pU_norm,false
+    # else
+    #     pC = cauchy_point_box(x_free,state.Δ,g_free,model.B,lb_free,ub_free)
+    #     #println("pC = $pC")
+    #     return pC,norm(pC,2),false
+    # end
 end
 
 function reduction_ratio(model,p,fx,fx̄)
@@ -126,9 +151,11 @@ function Base.iterate(iter::NSTR_iterable{R}, state::NSTR_state) where {R}
     model = TrustRegionModel(state.fx.g[:],state.B)
     #p,p_norm,on_boundary = solve_model(state.Δ,model)
     p,p_norm,on_boundary = solve_model_constrained(state,model)
-    println(p)
+    #clamp!(p,eps(),Inf)
+    println("p=$p")
     x̄ = state.x + reshape(p,size(state.x))
-    #println("x̄=$x̄")
+    clamp!(x̄,eps(),Inf)
+    println("x̄=$x̄")
     fx̄ = iter.f(x̄)
     state.ρ = reduction_ratio(model,p,state.fx,fx̄)
     if isnan(state.ρ)
