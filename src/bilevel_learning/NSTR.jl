@@ -34,7 +34,8 @@ function Base.iterate(iter::NSTR_iterable)
     Δ = copy(iter.Δ₀)
     fx = iter.f(x)
     if length(x) > 1
-        B = LSR1Operator(length(x))
+        #B = LSR1Operator(length(x))
+        B = LBFGSOperator(length(x))
     else
         B = 0.1
     end
@@ -49,7 +50,20 @@ function unconstrained_optimum(g,B::Real)
     return p, norm(p,2)
 end
 function unconstrained_optimum(g,B::LSR1Operator)
-    p,_ = cg(B,-g) # TODO B puede estar mal condicionada
+    if g'*(B*g) > 0
+        p,_ = cg(B,-g) # TODO B puede estar mal condicionada
+    else
+        p = Inf*ones(size(g))
+    end
+    return p, norm(p,2)
+end
+
+function unconstrained_optimum(g,B::LBFGSOperator)
+    if g'*(B*g) > 0
+        p,_ = cg(B,-g) # TODO B puede estar mal condicionada
+    else
+        p = Inf*ones(size(g))
+    end
     return p, norm(p,2)
 end
 
@@ -64,8 +78,24 @@ function cauchy_point(Δ,g,B)
     return -t*g
 end
 
+function cauchy_point_2(x,Δ,g,B,lb,ub)
+    t = 0
+    #println("lb=$lb")
+    gᵗBg = g'*(B*g)
+    if gᵗBg ≤ 0 # Negative curvature detected
+        println("neg. curvature")
+        t = step_size_to_bound(zeros(size(x)),-g,lb,ub)
+    else
+        #println("pos. curvature: a=$(norm(g)^2/gᵗBg), b=$(Δ/norm(g))")
+        min_step = step_size_to_bound(zeros(size(x)),-g,lb,ub)
+        t = min(norm(g)^2/gᵗBg,min_step)
+    end
+    s = -t*g
+    return s
+end
+
 function find_intersection(x,Δ)
-    lb_total = max.(eps() .-x, -Δ)
+    lb_total = max.(sqrt(eps()) .-x, -Δ)
     return lb_total,Δ*ones(size(x))
 end
 
@@ -75,13 +105,15 @@ function in_bounds(x,lb,ub)
 end
 
 function step_size_to_bound(x,s,lb,ub)
-    nz = findall(!iszero,s)
+    nz = findall(iszero,isapprox.(s,0;atol=sqrt(eps())))
     snz = s[nz]
     steps = Inf .* ones(size(x))
     lbx = lb .-x
     steps[nz] = max.(lbx[nz] ./snz, (ub .- x)[nz] ./snz)
+    println("steps = $(minimum(steps[nz]))")
     min_step = minimum(steps[nz])
-    return min_step
+    min_step2 = 2e-8*mean(steps[nz])
+    return min_step2
 end
 
 function cauchy_point_box(x,g,lb,ub)
@@ -92,7 +124,7 @@ end
 
 function solve_model(Δ,model)
     pU,pU_norm = unconstrained_optimum(model.g,model.B)
-    if pU_norm ≤ state.Δ
+    if pU_norm ≤ Δ
         println("Newton")
         return pU,pU_norm,false
     else
@@ -102,65 +134,38 @@ function solve_model(Δ,model)
     end
 end
 
-function solve_model_constrained(state,model)
-    x = state.x[:]
+function solve_model_constrained(x,Δ,g,B)
     # Identify the bounds
-    lb,ub = find_intersection(x,state.Δ)
+    lb,ub = find_intersection(x,Δ)
 
-    # Identify Active set
-    on_bound = zeros(size(x))
-    on_lb = findall(abs.(x .-lb) .<= eps())
-    on_ub = findall(abs.(x .-ub) .<= eps())
-    on_bound[on_lb] .= -1
-    on_bound[on_ub] .= 1
-    active_set = on_bound .* model.g .< 0
-    free_set = 1 .- active_set
-    println("x=$x")
-    println("g=$(model.g)")
-    #println("xlb=$(x .-lb)")
-    println("free_set=$free_set")
-    x_free = x .* free_set
-    lb_free = lb .* free_set
-    #println("lb_free = $lb_free")
-    ub_free = ub .* free_set
-    g_free = model.g .* free_set
-
-    pC = cauchy_point_box(x_free,g_free,lb_free,ub_free)
-    #     #println("pC = $pC")
-    return pC,norm(pC,2),false
-
-    # pU,pU_norm = unconstrained_optimum(model.g,model.B)
-    # if in_bounds(pU,lb,ub)
-    #     println("Newton")
-    #     return pU,pU_norm,false
-    # else
-    #     pC = cauchy_point_box(x_free,state.Δ,g_free,model.B,lb_free,ub_free)
-    #     #println("pC = $pC")
-    #     return pC,norm(pC,2),false
-    # end
+    pU,pU_norm = unconstrained_optimum(g,B)
+    if in_bounds(pU,lb,ub)
+        println("Newton")
+        return pU,pU_norm,false
+    else
+        pC = cauchy_point_2(x,Δ,g,B,lb,ub)
+        return pC,norm(pC,2),false
+    end
 end
 
-function reduction_ratio(model,p,fx,fx̄)
-    pred = - p'*model.g - 0.5*p'*(model.B*p)
+function reduction_ratio(g,B,p,fx,fx̄)
+    println("p=$(norm(p))")
+    pred = - p'*g - 0.5*p'*(B*p)
     ared = fx.c - fx̄.c
     return ared/pred
 end
 
 function Base.iterate(iter::NSTR_iterable{R}, state::NSTR_state) where {R}
 
-    model = TrustRegionModel(state.fx.g[:],state.B)
+    #model = TrustRegionModel(state.fx.g[:],state.B)
     #p,p_norm,on_boundary = solve_model(state.Δ,model)
-    p,p_norm,on_boundary = solve_model_constrained(state,model)
-    #clamp!(p,eps(),Inf)
-    println("p=$p")
+    p,p_norm,on_boundary = solve_model_constrained(state.x[:],state.Δ,state.fx.g[:],state.B)
+    #println("p=$(norm(p))")
     x̄ = state.x + reshape(p,size(state.x))
-    clamp!(x̄,eps(),Inf)
-    println("x̄=$x̄")
+    #clamp!(x̄,eps(),Inf)
+    #println("x̄=$x̄")
     fx̄ = iter.f(x̄)
-    state.ρ = reduction_ratio(model,p,state.fx,fx̄)
-    if isnan(state.ρ)
-        state.ρ = 0
-    end
+    state.ρ = reduction_ratio(state.fx.g[:],state.B,p,state.fx,fx̄)
     
     # update SR1 matrix
     #println("$x̄, $(fx̄.g), $(state.fx.g)")
@@ -171,7 +176,7 @@ function Base.iterate(iter::NSTR_iterable{R}, state::NSTR_state) where {R}
         state.error_flag=true
     end
     yBs = y - state.B*s
-    if isa(state.B,LSR1Operator)
+    if isa(state.B,LBFGSOperator)
         push!(state.B,s,y)
     elseif abs(yBs'*s) > 0.1*norm₂²(yBs)# Guarantee boundedness of the hessian approximation
         state.B += ((yBs)*(yBs)')/((yBs)'*y) #SR1 Update
