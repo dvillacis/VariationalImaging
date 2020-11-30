@@ -50,11 +50,7 @@ function unconstrained_optimum(g,B::Real)
     return p, norm(p,2)
 end
 function unconstrained_optimum(g,B::LSR1Operator)
-    if g'*(B*g) > 0
-        p,_ = cg(B,-g) # TODO B puede estar mal condicionada
-    else
-        p = Inf*ones(size(g))
-    end
+    p,_ = cg(B,-g) # TODO B puede estar mal condicionada
     return p, norm(p,2)
 end
 
@@ -78,20 +74,20 @@ function cauchy_point(Δ,g,B)
     return -t*g
 end
 
-function cauchy_point_2(x,Δ,g,B,lb,ub)
+function cauchy_point_box(x,Δ,g,B,lb,ub)
+    Δmax = 10.0
+    γ = min(1,Δmax/norm(g))
     t = 0
-    #println("lb=$lb")
     gᵗBg = g'*(B*g)
     if gᵗBg ≤ 0 # Negative curvature detected
-        println("neg. curvature")
-        t = step_size_to_bound(zeros(size(x)),-g,lb,ub)
+        t = (Δ/10.0)*γ
     else
-        #println("pos. curvature: a=$(norm(g)^2/gᵗBg), b=$(Δ/norm(g))")
-        min_step = step_size_to_bound(zeros(size(x)),-g,lb,ub)
-        t = min(norm(g)^2/gᵗBg,min_step)
+        t = min(norm(g)^2/gᵗBg,(Δ/10.0)*γ)
     end
-    s = -t*g
-    return s
+    d = -t*g
+    x_ = x + d
+    Px = clamp!(x_,eps(),Inf)
+    return Px-x
 end
 
 function find_intersection(x,Δ)
@@ -103,24 +99,6 @@ end
 function in_bounds(x,lb,ub)
     return all(x .>= lb) & all(x .<= ub)
 end
-
-function step_size_to_bound(x,s,lb,ub)
-    nz = findall(iszero,isapprox.(s,0;atol=sqrt(eps())))
-    snz = s[nz]
-    steps = Inf .* ones(size(x))
-    lbx = lb .-x
-    steps[nz] = max.(lbx[nz] ./snz, (ub .- x)[nz] ./snz)
-    println("steps = $(minimum(steps[nz]))")
-    min_step = minimum(steps[nz])
-    min_step2 = 2e-8*mean(steps[nz])
-    return min_step2
-end
-
-function cauchy_point_box(x,g,lb,ub)
-    to_bounds = step_size_to_bound(zeros(size(x)),-g,lb,ub)
-    return -to_bounds*g
-end
-
 
 function solve_model(Δ,model)
     pU,pU_norm = unconstrained_optimum(model.g,model.B)
@@ -135,21 +113,23 @@ function solve_model(Δ,model)
 end
 
 function solve_model_constrained(x,Δ,g,B)
-    # Identify the bounds
     lb,ub = find_intersection(x,Δ)
+    pC = cauchy_point_box(x,Δ,g,B,lb,ub)
+    return pC,norm(pC,2),false
+    # Identify the bounds
+    # lb,ub = find_intersection(x,Δ)
 
-    pU,pU_norm = unconstrained_optimum(g,B)
-    if in_bounds(pU,lb,ub)
-        println("Newton")
-        return pU,pU_norm,false
-    else
-        pC = cauchy_point_2(x,Δ,g,B,lb,ub)
-        return pC,norm(pC,2),false
-    end
+    # pU,pU_norm = unconstrained_optimum(g,B)
+    # if in_bounds(pU,lb,ub)
+    #     println("Newton")
+    #     return pU,pU_norm,false
+    # else
+    #     pC = cauchy_point_box(x,Δ,g,B,lb,ub)
+    #     return pC,norm(pC,2),false
+    # end
 end
 
 function reduction_ratio(g,B,p,fx,fx̄)
-    println("p=$(norm(p))")
     pred = - p'*g - 0.5*p'*(B*p)
     ared = fx.c - fx̄.c
     return ared/pred
@@ -157,7 +137,6 @@ end
 
 function Base.iterate(iter::NSTR_iterable{R}, state::NSTR_state) where {R}
 
-    #model = TrustRegionModel(state.fx.g[:],state.B)
     #p,p_norm,on_boundary = solve_model(state.Δ,model)
     p,p_norm,on_boundary = solve_model_constrained(state.x[:],state.Δ,state.fx.g[:],state.B)
     #println("p=$(norm(p))")
