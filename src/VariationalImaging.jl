@@ -26,6 +26,7 @@ include("operators/PatchOperator.jl")
 
 include("utilities/IterationTools.jl")
 include("utilities/BatchMul.jl")
+include("utilities/Experiment.jl")
 
 include("SDDenoise.jl")
 include("Util.jl")

@@ -4,10 +4,23 @@ export Dataset, Experiment, run_experiment, save_experiment
 
 struct Dataset
     name::String
-    size::Tuple
+    size::Int
     imsize::Tuple
     original::AbstractArray
     noisy::AbstractArray
+end
+
+function Dataset(name,filelist)
+    image_pairs = readlines(filelist)
+    M,N = size(load(split(image_pairs[1],",")[1]))
+    original = zeros(M,N,length(image_pairs))
+    noisy = zeros(M,N,length(image_pairs))
+    for i = 1:length(image_pairs)
+        pair = split(image_pairs[i],",")
+        original[:,:,i] = load(pair[1])
+        noisy[:,:,i] = load(pair[2])
+    end
+    Dataset(name,length(image_pairs),(M,N),original,noisy)
 end
 
 struct Experiment
@@ -66,7 +79,7 @@ function save_experiment(ex::Experiment,ds::Dataset,opt::AbstractArray,fx,res,it
         write(io,"Number of Iterations: $iters\n")
         write(io,"Quality Measures\n")
         write(io,"num \t orig_ssim \t orig_psnr \t opt_ssim \t opt_psnr\n")
-        write(io,"1 \t $(assess_ssim(orig,noisy) \t assess_psnr(orig,noisy) \t $(assess_ssim(orig,fx.u) \t assess_psnr(orig,fx.u)\n")
+        write(io,"1 \t $(assess_ssim(orig,noisy)) \t $(assess_psnr(orig,noisy)) \t $(assess_ssim(orig,fx.u)) \t $(assess_psnr(orig,fx.u))\n")
     end
 
 end
