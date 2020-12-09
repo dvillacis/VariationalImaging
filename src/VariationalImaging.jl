@@ -137,6 +137,42 @@ function TVl₂Denoising(img::AbstractArray{T,2},α::AbstractArray{S,2};maxit=10
     return x
 end
 
+function TVl₂Denoising(img::AbstractArray{T,3},α::AbstractArray{S,2};maxit=1000,verbose=false,freq=10,visualize=false) where {T,S}
+
+    img = Float64.(Gray{Float64}.(img))
+
+    M,N,O = size(img)
+
+    if verbose == false
+        verbose_iter = maxit+1
+    else
+        verbose_iter = freq
+    end
+
+    params = (
+        α = α,
+        τ₀ = 5,
+        σ₀ = 0.99/5,
+        ρ = 0,
+        accel = true,
+        verbose_iter = verbose_iter,
+        maxiter = maxit,
+        save_iterations = false
+    )
+
+    x = zeros(size(img))
+    
+    for i=1:O
+        print(".")
+        st, iterate = initialise_visualisation(visualize)
+        x_, y_, st = denoise_sd_pdps(img[:,:,i]; iterate=iterate, params=params)
+        x[:,:,i] = x_
+        finalise_visualisation(st)
+    end
+
+    return x
+end
+
 function TikhonovDenoising(img::AbstractArray{T,2},α::Real) where {T}
     M,N = size(img)
     L = Gradient(M,N)
