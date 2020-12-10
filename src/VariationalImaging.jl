@@ -5,6 +5,7 @@ using Krylov
 using LinearAlgebra
 using Printf
 
+
 using ColorTypes: Gray
 import ColorVectorSpace
 
@@ -99,13 +100,13 @@ function TVl₂Denoising(img::AbstractArray{T,3},α::Real;maxit=1000,verbose=fal
     x = zeros(size(img))
     
     for i=1:O
-        print(".")
+        #print(".")
         st, iterate = initialise_visualisation(false)
         x_, y_, st_ = denoise_pdps(img[:,:,i]; iterate=iterate, params=params)
         x[:,:,i] = x_
         finalise_visualisation(st)
     end
-    print("*")
+    #print("*")
     return x
 end
 
@@ -163,7 +164,7 @@ function TVl₂Denoising(img::AbstractArray{T,3},α::AbstractArray{S,2};maxit=10
     x = zeros(size(img))
     
     for i=1:O
-        print(".")
+        #print(".")
         st, iterate = initialise_visualisation(visualize)
         x_, y_, st = denoise_sd_pdps(img[:,:,i]; iterate=iterate, params=params)
         x[:,:,i] = x_
