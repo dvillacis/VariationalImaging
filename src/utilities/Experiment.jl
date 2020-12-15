@@ -12,13 +12,14 @@ end
 
 function Dataset(name,filelist)
     image_pairs = readlines(filelist)
-    M,N = size(load(split(image_pairs[1],",")[1]))
+    dir = dirname(filelist)*"/"
+    M,N = size(load(dir*split(image_pairs[1],",")[1]))
     original = zeros(M,N,length(image_pairs))
     noisy = zeros(M,N,length(image_pairs))
     for i = 1:length(image_pairs)
         pair = split(image_pairs[i],",")
-        original[:,:,i] = load(pair[1])
-        noisy[:,:,i] = load(pair[2])
+        original[:,:,i] = load(dir*pair[1])
+        noisy[:,:,i] = load(dir*pair[2])
     end
     Dataset(name,length(image_pairs),(M,N),original,noisy)
 end

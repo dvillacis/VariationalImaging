@@ -143,6 +143,11 @@ function TVl₂Denoising(img::AbstractArray{T,3},α::AbstractArray{S,2};maxit=10
     img = Float64.(Gray{Float64}.(img))
 
     M,N,O = size(img)
+    m,n = size(α)
+    if M > m || N > n
+        p = PatchOperator(α,img[:,:,1])
+        α = patch(p,α)
+    end
 
     if verbose == false
         verbose_iter = maxit+1
@@ -164,7 +169,6 @@ function TVl₂Denoising(img::AbstractArray{T,3},α::AbstractArray{S,2};maxit=10
     x = zeros(size(img))
     
     for i=1:O
-        #print(".")
         st, iterate = initialise_visualisation(visualize)
         x_, y_, st = denoise_sd_pdps(img[:,:,i]; iterate=iterate, params=params)
         x[:,:,i] = x_
