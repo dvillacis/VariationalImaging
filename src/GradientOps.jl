@@ -55,11 +55,11 @@ end
 
 function ∇₂b!(u₁, u₂, u)
     @. @views begin
-        u₁[1:(end-1), :] = u[2:end, :] - u[1:(end-1), :]
-        u₁[end, :, :] = 0
+        u₁[2:end, :] = u[1:(end-1), :] - u[2:end, :]
+        u₁[1, :, :] = 0
 
-        u₂[:, 1:(end-1)] = u[:, 2:end] - u[:, 1:(end-1)]
-        u₂[:, end] = 0
+        u₂[:, 2:end] = u[:, 1:(end-1)] - u[:, 2:end]
+        u₂[:, 1] = 0
     end
     return u₁, u₂
 end

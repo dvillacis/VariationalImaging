@@ -79,6 +79,7 @@ function test_reg_denoise(;
     # Define Linear operator
     #op = CenteredGradientOp()
     op = BwdGradientOp()
+    #op = FwdGradientOp()
 
     # Run algorithm
     x, y, st = gen_denoise_pdps(b_noisy,op; iterate=iterate, params=params)
