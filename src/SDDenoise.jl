@@ -1,5 +1,5 @@
 ########################################################
-# Basic TV denoising via primal–dual proximal splitting
+# Scale Dependent TV denoising via primal–dual proximal splitting
 ########################################################
 
 __precompile__()

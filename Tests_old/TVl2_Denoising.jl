@@ -31,7 +31,7 @@ const default_params = (
     verbose_iter = 10,
     maxiter = 1000,
     save_results = false,
-    image_name = "lena_gray",
+    image_name = "cameraman",
     save_iterations = false
 )
 

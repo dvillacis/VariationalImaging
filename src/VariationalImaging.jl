@@ -1,10 +1,7 @@
 module VariationalImaging
 
-using LinearOperators
-using Krylov
 using LinearAlgebra
 using Printf
-
 
 using ColorTypes: Gray
 import ColorVectorSpace
@@ -22,23 +19,18 @@ abstract type AbstractRegularizationTerm end
 # Write your package code here.
 include("operators/PatchOperator.jl")
 
-#include("functions/L2DataTerm.jl")
-#include("functions/NormL21.jl")
+#include("utilities/IterationTools.jl")
+#include("utilities/BatchMul.jl")
+#include("utilities/Experiment.jl")
 
-include("utilities/IterationTools.jl")
-include("utilities/BatchMul.jl")
-include("utilities/Experiment.jl")
-
+include("GradientOps.jl")
+include("RegDenoise.jl")
 include("SDDenoise.jl")
 include("Util.jl")
 
-#include("solvers/PDHG.jl")
-
-#include("bilevel_learning/L2UpperLevelCost.jl")
 include("bilevel_learning/MatrixUtils.jl")
-include("bilevel_learning/NSTR.jl")
+#include("bilevel_learning/NSTR.jl")
 
-export prox!, cprox!
 export TVl₂Denoising, TikhonovDenoising
 export find_optimal_parameter
 
