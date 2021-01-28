@@ -31,7 +31,7 @@ const default_params = (
     noise_level = 0.1,
     verbose_iter = 10,
     maxiter = 1000,
-    save_results = true,
+    save_results = false,
     image_name = "lighthouse",
     save_iterations = false
 )

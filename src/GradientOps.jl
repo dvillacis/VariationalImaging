@@ -70,13 +70,13 @@ end
 
 function ∇₂bᵀ!(v, v₁, v₂)
     @. @views begin
-        v[2:(end-1), :] = v₁[1:(end-2), :] - v₁[2:(end-1), :]
-        v[1, :] = -v₁[1, :]
-        v[end, :] = v₁[end-1, :]
+        v[2:(end-1), :] = v₁[3:end, :] - v₁[2:(end-1), :]
+        v[1, :] = v₁[2, :]
+        v[end, :] = -v₁[end, :]
 
-        v[:, 2:(end-1)] += v₂[:, 1:(end-2)] - v₂[:, 2:(end-1)]
-        v[:, 1] += -v₂[:, 1]
-        v[:, end] += v₂[:, end-1]
+        v[:, 2:(end-1)] += v₂[:, 3:end] - v₂[:, 2:(end-1)]
+        v[:, 1] += v₂[:, 2]
+        v[:, end] += -v₂[:, end]
     end
     return v
 end
