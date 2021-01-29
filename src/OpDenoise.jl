@@ -4,14 +4,14 @@
 
 __precompile__()
 
-module RegDenoise
+module OpDenoise
 
 using AlgTools.Util
 using AlgTools.LinOps
 import AlgTools.Iterate
 using VariationalImaging.GradientOps
 
-export gen_denoise_pdps
+export op_denoise_pdps
 
 #############
 # Data types
@@ -49,7 +49,7 @@ end
 # Algorithm
 ############
 
-function gen_denoise_pdps(b :: Image, op :: LinOp{Image,Data};
+function op_denoise_pdps(b :: Image, op :: LinOp{Image,Data};
     xinit :: Union{Image,Nothing} = nothing,
     iterate = Iterate.simple_iterate,
     params::NamedTuple) where Data
