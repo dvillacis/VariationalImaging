@@ -118,6 +118,23 @@ end
 # Centered differences gradient linear operator
 ###########################
 
+function ∇₂cᵀ!(v, v₁, v₂)
+    @. @views begin
+        v[2:(end-1), :] = (v₁[1:(end-2), :] - v₁[3:end, :])/2
+        v[1, :] = (-v₁[1, :] - v₁[2,:])/2
+        v[end, :] = (v₁[end-1, :] + v₁[end,:])/2
+
+        v[:, 2:(end-1)] += (v₂[:, 1:(end-2)] - v₂[:, 3:end])/2
+        v[:, 1] += (-v₂[:, 1] - v₂[:, 2])/2
+        v[:, end] += (v₂[:, end] + v₂[:, end-1])/2
+    end
+    return v
+end
+
+function ∇₂cᵀ!(u, v)
+    ∇₂cᵀ!(u, @view(v[1, :, :]), @view(v[2, :, :]))
+end
+
 struct CenteredGradientOp <: AdjointableOp{Primal, Dual}
 
 end
@@ -139,7 +156,7 @@ function LinOps.calc_adjoint(op::CenteredGradientOp, y::Dual)
 end
 
 function LinOps.calc_adjoint!(res::Primal, op::CenteredGradientOp, y::Dual)
-    ∇₂ᵀ!(res,y)
+    ∇₂cᵀ!(res,y)
 end
 
 function LinOps.opnorm_estimate(op::CenteredGradientOp)

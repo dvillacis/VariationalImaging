@@ -31,7 +31,7 @@ const default_params = (
     noise_level = 0.1,
     verbose_iter = 10,
     maxiter = 1000,
-    save_results = false,
+    save_results = true,
     image_name = "lighthouse",
     save_iterations = false
 )
@@ -77,8 +77,8 @@ function test_reg_denoise(;
     st, iterate = initialise_visualisation(visualise)
 
     # Define Linear operator
-    #op = CenteredGradientOp()
-    op = BwdGradientOp()
+    op = CenteredGradientOp()
+    #op = BwdGradientOp()
     #op = FwdGradientOp()
 
     # Run algorithm
