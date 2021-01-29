@@ -1,4 +1,6 @@
 
+module Util
+
 export  proj_norm₂₁ball!,
         norm₂₁w
 
@@ -42,3 +44,5 @@ function norm₂₁w(y::AbstractArray{T,3},w::AbstractArray{T,2}) where {T}
 
     return accum
 end
+
+end # Module
