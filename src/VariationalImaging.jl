@@ -24,6 +24,7 @@ include("operators/PatchOperator.jl")
 #include("utilities/Experiment.jl")
 
 include("Util.jl")
+include("TestDatasets.jl")
 
 include("GradientOps.jl")
 include("SumRegsDenoise.jl")
