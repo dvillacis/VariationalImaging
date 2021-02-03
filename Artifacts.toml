@@ -1,0 +1,7 @@
+[datasets]
+git-tree-sha1 = "bbf5405def11b844dcefd5296e3c0fce676eff59"
+lazy = true
+
+    [[datasets.download]]
+    sha256 = "1630b0fe8d6b5a68851449836efe2f7f782426a472165f4d72b76c31a05e0502"
+    url = "https://storage.googleapis.com/pagina-personal.appspot.com/datasets.tar.gz"
