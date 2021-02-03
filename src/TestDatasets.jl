@@ -12,6 +12,7 @@ export testdataset
 
 const remotedatasets = [
     "cameraman",
+    "cameraman_128",
     "mandrill",
     "peppers"
 ]

@@ -9,6 +9,8 @@ module SumRegsDenoise
 using AlgTools.Util
 using AlgTools.LinOps
 import AlgTools.Iterate
+
+using VariationalImaging.Util
 using VariationalImaging.GradientOps
 
 export sumregs_denoise_pdps
@@ -109,9 +111,9 @@ function sumregs_denoise_pdps(b :: Image,
         @. y₂ = (y₂ + σ*Δy₂) #/(1 + σ*ρ/α₂)
         @. y₃ = (y₃ + σ*Δy₃) #/(1 + σ*ρ/α₃)
 
-        proj_norm₂₁ball!(y₁, α₁)                # |  prox
-        proj_norm₂₁ball!(y₂, α₂)
-        proj_norm₂₁ball!(y₃, α₃)
+        _proj_norm₂₁ball!(y₁, α₁)                # |  prox
+        _proj_norm₂₁ball!(y₂, α₂)
+        _proj_norm₂₁ball!(y₃, α₃)
 
         if params.accel
             τ, σ = τ*ω, σ/ω

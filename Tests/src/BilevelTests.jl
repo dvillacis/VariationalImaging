@@ -27,10 +27,10 @@ using VariationalImaging.Bilevel
 const default_save_prefix="bilevel_result_"
 
 const default_params = (
-    verbose_iter = 10,
-    maxiter = 100,
+    verbose_iter = 1,
+    maxiter = 20,
     save_results = true,
-    dataset_name = "cameraman",
+    dataset_name = "cameraman_128",
     save_iterations = false
 )
 
@@ -74,7 +74,7 @@ function denoise(data,x)
         accel = true,
         save_results = false,
         maxiter = 1000,
-        verbose_iter = 500,
+        verbose_iter = 1001,
         save_iterations = false
     )
     st_opt, iterate_opt = initialise_visualisation(false)
@@ -149,7 +149,7 @@ function test_bilevel_learn(;
     # Launch (background) visualiser
     st, iterate = initialise_visualisation(visualise)
 
-    x₀ = 1.0
+    x₀ = 3.0
 
     # Run algorithm
     x, st = bilevel_learn((b,b_noisy),learning_function; xinit=x₀,iterate=iterate, params=params)

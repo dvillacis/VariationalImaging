@@ -51,15 +51,22 @@ end
 # Auxiliary Functions
 ############
 
-function cauchy_point(Δ,g,B)
+function cauchy_point_box(x::Real,Δ,g,B)
+    Δmax = 10.0
+    γ = min(1,Δmax/norm(g))
     t = 0
     gᵗBg = g'*(B*g)
     if gᵗBg ≤ 0 # Negative curvature detected
-        t = Δ/norm(g)
+        t = (Δ/10.0)*γ
     else
-        t = min(norm(g)^2/gᵗBg,Δ/norm(g))
+        t = min(norm(g)^2/gᵗBg,(Δ/10.0)*γ)
     end
-    return -t*g
+    d = -t*g
+    x_ = x + d
+    if x_ <= 0
+        x_ = eps()
+    end
+    return x_-x
 end
 
 ############
@@ -92,7 +99,7 @@ function bilevel_learn(ds :: Dataset,
 
     v = iterate(params) do verbose :: Function
         
-        p = cauchy_point(Δ,gx,B) # solve tr subproblem
+        p = cauchy_point_box(x,Δ,gx,B) # solve tr subproblem
 
         x̄ = x + p  # test new point
 
