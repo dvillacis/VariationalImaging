@@ -30,6 +30,7 @@ include("GradientOps.jl")
 include("SumRegsDenoise.jl")
 include("OpDenoise.jl")
 include("SDDenoise.jl")
+include("Bilevel.jl")
 
 include("bilevel_learning/MatrixUtils.jl")
 #include("bilevel_learning/NSTR.jl")

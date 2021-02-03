@@ -23,18 +23,27 @@ Image = Array{Float64,2}
 Primal = Image
 Dual = Array{Float64,3}
 Parameter = Union{Real,AbstractArray}
-TrainingPair = Tuple{Image,Image}
+Dataset = Tuple{Array{Float64,3},Array{Float64,3}}
 
 #########################
 # Iterate initialisation
 #########################
 
-function init_rest(x::Parameter,learning_function::Function,Δ)
+function init_rest(x::AbstractArray,learning_function::Function,Δ,ds)
     x̄ = copy(x)
-    fx,gx = learning_function(x)
+    fx,gx = learning_function(x,ds)
     fx̄ = copy(fx)
     gx̄ = copy(gx)
     B = 0.1*Diagonal(ones(size(x)))
+    return x, x̄, fx, gx, fx̄, gx̄, Δ, B
+end
+
+function init_rest(x::Real,learning_function::Function,Δ,ds)
+    x̄ = copy(x)
+    fx,gx = learning_function(x,ds)
+    fx̄ = copy(fx)
+    gx̄ = copy(gx)
+    B = 0.1
     return x, x̄, fx, gx, fx̄, gx̄, Δ, B
 end
 
@@ -57,7 +66,7 @@ end
 # Algorithm
 ############
 
-function bilevel_learn(pair :: TrainingPair,
+function bilevel_learn(ds :: Dataset,
     learning_function::Function;
     xinit :: Parameter,
     iterate = Iterate.simple_iterate,
@@ -75,7 +84,7 @@ function bilevel_learn(pair :: TrainingPair,
     # Initialise iterates
     ######################
 
-    x, x̄, fx, gx, fx̄, gx̄, Δ, B = init_rest(xinit,learning_function,Δ₀)
+    x, x̄, fx, gx, fx̄, gx̄, Δ, B = init_rest(xinit,learning_function,Δ₀,ds)
 
     ####################
     # Run the algorithm
@@ -85,9 +94,9 @@ function bilevel_learn(pair :: TrainingPair,
         
         p = cauchy_point(Δ,gx,B) # solve tr subproblem
 
-        @. x̄ = x = p  # test new point
+        x̄ = x + p  # test new point
 
-        fx̄,gx̄ = learning_function(x̄,pair)
+        fx̄,gx̄ = learning_function(x̄,ds)
         ρ = (-p'*gx - 0.5*p'*(B*p))/(fx-fx̄) # pred/ared
 
         if ρ < η₁               # radius update
@@ -97,9 +106,9 @@ function bilevel_learn(pair :: TrainingPair,
         end
 
         if ρ > η₂
-            @. x = x̄
-            @. fx = fx̄
-            @. gx = gx̄
+            x = x̄
+            fx = fx̄
+            gx = gx̄
         end
 
         ################################
@@ -113,7 +122,7 @@ function bilevel_learn(pair :: TrainingPair,
         v
     end
 
-    return x, y, v
+    return x, v
 end
 
 end # Module

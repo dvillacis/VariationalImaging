@@ -9,6 +9,8 @@ module OpDenoise
 using AlgTools.Util
 using AlgTools.LinOps
 import AlgTools.Iterate
+
+using VariationalImaging.Util
 using VariationalImaging.GradientOps
 
 export op_denoise_pdps
@@ -21,6 +23,7 @@ ImageSize = Tuple{Integer,Integer}
 Image = Array{Float64,2}
 Primal = Image
 Dual = Array{Float64,3}
+Dataset = Array{Float64,3}
 
 #########################
 # Iterate initialisation
@@ -88,7 +91,7 @@ function op_denoise_pdps(b :: Image, op :: LinOp{Image,Data};
         @. x̄ = (1+ω)*x - ω*x̄           # over-relax: x̄ = 2x-x_old
         inplace!(Δy,op,x̄)              # dual step: y
         @. y = (y + σ*Δy)#/(1 + σ*ρ/α)  
-        proj_norm₂₁ball!(y, α)         # |  prox
+        _proj_norm₂₁ball!(y, α)         # |  prox
 
         if params.accel
             τ, σ = τ*ω, σ/ω
@@ -108,5 +111,20 @@ function op_denoise_pdps(b :: Image, op :: LinOp{Image,Data};
 
     return x, y, v
 end
+
+
+function op_denoise_pdps(ds :: Dataset, op :: LinOp{Image,Data};
+    xinit :: Union{Image,Nothing} = nothing,
+    iterate = Iterate.simple_iterate,
+    params::NamedTuple) where Data
+
+    M,N,O = size(ds)
+    out = zeros(size(ds))
+    for i=1:O
+        out[:,:,i],y,st = op_denoise_pdps(ds[:,:,i],op;xinit=xinit,iterate=iterate,params=params) 
+    end
+    return out
+end
+
 
 end # Module
