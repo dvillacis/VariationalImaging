@@ -105,9 +105,9 @@ function sumregs_denoise_pdps(b :: Image,
         inplace!(Δy₂,op₂,x̄) 
         inplace!(Δy₃,op₃,x̄) 
 
-        @. y₁ = (y₁ + σ*Δy₁)/(1 + σ*ρ/α₁)
-        @. y₂ = (y₁ + σ*Δy₂)/(1 + σ*ρ/α₂)
-        @. y₃ = (y₁ + σ*Δy₃)/(1 + σ*ρ/α₃)
+        @. y₁ = (y₁ + σ*Δy₁) #/(1 + σ*ρ/α₁)
+        @. y₂ = (y₂ + σ*Δy₂) #/(1 + σ*ρ/α₂)
+        @. y₃ = (y₃ + σ*Δy₃) #/(1 + σ*ρ/α₃)
 
         proj_norm₂₁ball!(y₁, α₁)                # |  prox
         proj_norm₂₁ball!(y₂, α₂)
@@ -124,7 +124,7 @@ function sumregs_denoise_pdps(b :: Image,
             inplace!(Δy₁,op₁,x)
             inplace!(Δy₂,op₂,x) 
             inplace!(Δy₃,op₃,x) 
-            value = norm₂²(b-x)/2 + params.α₁*γnorm₂₁(Δy₁, params.ρ) + params.α₂*γnorm₂₁(Δy₂, params.ρ) + params.α₃*γnorm₂₁(Δy₃, params.ρ)
+            value = norm₂²(b-x)/2 + norm₂₁w(Δy₁, params.α₁) + norm₂₁w(Δy₂, params.α₂) + norm₂₁w(Δy₃, params.α₃)
             value, x
         end
 

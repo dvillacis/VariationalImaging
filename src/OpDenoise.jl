@@ -87,7 +87,7 @@ function op_denoise_pdps(b :: Image, op :: LinOp{Image,Data};
         @. x = (x-τ*(Δx-b))/(1+τ)      # |  prox
         @. x̄ = (1+ω)*x - ω*x̄           # over-relax: x̄ = 2x-x_old
         inplace!(Δy,op,x̄)              # dual step: y
-        @. y = (y + σ*Δy)/(1 + σ*ρ/α)  
+        @. y = (y + σ*Δy)#/(1 + σ*ρ/α)  
         proj_norm₂₁ball!(y, α)         # |  prox
 
         if params.accel
@@ -99,7 +99,7 @@ function op_denoise_pdps(b :: Image, op :: LinOp{Image,Data};
         ################################
         v = verbose() do     
             inplace!(Δy,op,x)
-            value = norm₂²(b-x)/2 + params.α*γnorm₂₁(Δy, params.ρ)
+            value = norm₂²(b-x)/2 + norm₂₁w(Δy, params.α)
             value, x
         end
 
