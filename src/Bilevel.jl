@@ -31,20 +31,22 @@ Dataset = Tuple{Array{Float64,3},Array{Float64,3}}
 
 function init_rest(x::AbstractArray,learning_function::Function,Δ,ds)
     x̄ = copy(x)
-    fx,gx = learning_function(x,ds)
+    u,fx,gx = learning_function(x,ds)
+    ū = copy(u)
     fx̄ = copy(fx)
     gx̄ = copy(gx)
     B = 0.1*Diagonal(ones(size(x)))
-    return x, x̄, fx, gx, fx̄, gx̄, Δ, B
+    return x, x̄, u, ū, fx, gx, fx̄, gx̄, Δ, B
 end
 
 function init_rest(x::Real,learning_function::Function,Δ,ds)
     x̄ = copy(x)
-    fx,gx = learning_function(x,ds)
+    u,fx,gx = learning_function(x,ds)
+    ū = copy(u)
     fx̄ = copy(fx)
     gx̄ = copy(gx)
     B = 0.1
-    return x, x̄, fx, gx, fx̄, gx̄, Δ, B
+    return x, x̄, u, ū, fx, gx, fx̄, gx̄, Δ, B
 end
 
 ############
@@ -91,7 +93,7 @@ function bilevel_learn(ds :: Dataset,
     # Initialise iterates
     ######################
 
-    x, x̄, fx, gx, fx̄, gx̄, Δ, B = init_rest(xinit,learning_function,Δ₀,ds)
+    x, x̄, u, ū, fx, gx, fx̄, gx̄, Δ, B = init_rest(xinit,learning_function,Δ₀,ds)
 
     ####################
     # Run the algorithm
@@ -99,11 +101,13 @@ function bilevel_learn(ds :: Dataset,
 
     v = iterate(params) do verbose :: Function
         
+        println("x=$x, Δ=$Δ, gx=$gx")
+
         p = cauchy_point_box(x,Δ,gx,B) # solve tr subproblem
 
         x̄ = x + p  # test new point
 
-        fx̄,gx̄ = learning_function(x̄,ds)
+        ū,fx̄,gx̄ = learning_function(x̄,ds)
         ρ = (-p'*gx - 0.5*p'*(B*p))/(fx-fx̄) # pred/ared
 
         if ρ < η₁               # radius update
@@ -114,6 +118,7 @@ function bilevel_learn(ds :: Dataset,
 
         if ρ > η₂
             x = x̄
+            u = ū
             fx = fx̄
             gx = gx̄
         end
@@ -122,14 +127,13 @@ function bilevel_learn(ds :: Dataset,
         # Give function value if needed
         ################################
         v = verbose() do     
-            value = fx
-            value, x
+            fx, u[:,:,1] # just show the first image on the dataset
         end
 
         v
     end
 
-    return x, v
+    return x, u, v
 end
 
 end # Module

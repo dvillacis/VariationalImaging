@@ -9,6 +9,7 @@ using SparseArrays
 using FileIO
 using ColorTypes: Gray
 import ColorVectorSpace
+using ImageContrastAdjustment
 
 using AlgTools.Util
 using AlgTools.LinkedLists
@@ -61,7 +62,7 @@ function learning_function(x,data)
     u = denoise(data[2],x)
     cost = 0.5*norm₂²(u-data[1])
     grad = gradient(x,u,data[1])
-    return cost,grad
+    return u,cost,grad
 end
 
 function denoise(data,x)
@@ -133,7 +134,7 @@ end
 ###############
 
 function test_bilevel_learn(;
-    visualise=false,
+    visualise=true,
     save_prefix=default_save_prefix,
     kwargs...)
 
@@ -152,12 +153,11 @@ function test_bilevel_learn(;
     x₀ = 3.0
 
     # Run algorithm
-    x, st = bilevel_learn((b,b_noisy),learning_function; xinit=x₀,iterate=iterate, params=params)
+    x, u, st = bilevel_learn((b,b_noisy),learning_function; xinit=x₀,iterate=iterate, params=params)
 
-    # Optimal denoised
-    opt_img = denoise(b_noisy,x)
+    adjust_histogram!(u,LinearStretching())
 
-    save_results(params, b, b_noisy, x, opt_img, st)
+    save_results(params, b, b_noisy, x, u, st)
 
     # Exit background visualiser
     finalise_visualisation(st)
