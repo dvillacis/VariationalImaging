@@ -22,7 +22,7 @@ SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 StringDistances = "88034a9c-02f8-509d-84a9-84ec65e18404"
 
 [compat]
-ColorVectorSpace = "0.9"
+StringDistances = "0.10"
 julia = "1"
 
 [extras]
