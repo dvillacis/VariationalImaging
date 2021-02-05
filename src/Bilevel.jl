@@ -116,7 +116,7 @@ function bilevel_learn(ds :: Dataset,
             Δ = β₂*Δ
         end
 
-        if ρ > η₂
+        if ρ > η₁
             x = x̄
             u = ū
             fx = fx̄

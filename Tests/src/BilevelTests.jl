@@ -31,7 +31,7 @@ const default_params = (
     verbose_iter = 1,
     maxiter = 20,
     save_results = true,
-    dataset_name = "cameraman_128",
+    dataset_name = "cameraman128_5",
     save_iterations = false
 )
 

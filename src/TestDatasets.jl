@@ -11,10 +11,17 @@ const artifacts_toml = abspath(joinpath(@__DIR__, "..", "Artifacts.toml"))
 export testdataset
 
 const remotedatasets = [
-    "cameraman",
-    "cameraman_128",
+    "cameraman512_10",
+    "cameraman256_10",
+    "cameraman256_5",
+    "cameraman128_5",
+    "faces_5",
+    "faces_10",
+    "matches_5",
+    "matches_10",
     "mandrill",
-    "peppers"
+    "peppers",
+    "playing_cards_5"
 ]
 
 function testdataset(datasetname; download_only::Bool = false)
@@ -31,11 +38,11 @@ function full_datasetname(datasetname)
         startswith(x, datasetname)
     end
     if idx === nothing
-        warn_msg = "\"$datasetname\" not found in `TestDatasets.remotefiles`."
+        warn_msg = "\"$datasetname\" not found in `TestDatasets.remotedatasets`."
 
         best_match = _findnearest(datasetname)
         if isnothing(best_match[2])
-            similar_matches = remotefiles[_findall(datasetname)]
+            similar_matches = remotedatasets[_findall(datasetname)]
             if !isempty(similar_matches)
                 similar_matches_msg = "  * \"" * join(similar_matches, "\"\n  * \"") * "\""
                 warn_msg = "$(warn_msg) Do you mean one of the following?\n$(similar_matches_msg)"
@@ -43,7 +50,7 @@ function full_datasetname(datasetname)
             throw(ArgumentError(warn_msg))
         else
             idx = best_match[2]
-            @warn "$(warn_msg) Load \"$(remotefiles[idx])\" instead."
+            @warn "$(warn_msg) Load \"$(remotedatasets[idx])\" instead."
         end
     end
     return remotedatasets[idx]
