@@ -115,15 +115,15 @@ function op_denoise_pdps(b :: Image;
 end
 
 
-function op_denoise_pdps(ds :: Dataset, op :: LinOp{Image,Data};
+function op_denoise_pdps(ds :: Dataset;
     xinit :: Union{Image,Nothing} = nothing,
     iterate = Iterate.simple_iterate,
-    params::NamedTuple) where Data
+    params::NamedTuple)
 
     M,N,O = size(ds)
     out = zeros(size(ds))
     for i=1:O
-        out[:,:,i],y,st = op_denoise_pdps(ds[:,:,i],op;xinit=xinit,iterate=iterate,params=params) 
+        out[:,:,i],y,st = op_denoise_pdps(ds[:,:,i];xinit=xinit,iterate=iterate,params=params) 
     end
     return out
 end
