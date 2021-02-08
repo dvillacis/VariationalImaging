@@ -58,17 +58,16 @@ end
 # Algorithm Paper
 ############
 
-function sumregs_denoise_pdps(b :: Image, 
-    op₁ :: LinOp{Image,Data}, 
-    op₂ :: LinOp{Image,Data}, 
-    op₃ :: LinOp{Image,Data};
+function sumregs_denoise_pdps(b :: Image;
     xinit :: Union{Image,Nothing} = nothing,
     iterate = Iterate.simple_iterate,
-    params::NamedTuple) where Data
+    params::NamedTuple)
 
     ################################                                        
     # Extract and set up parameters
-    ################################                    
+    ################################     
+    
+    op₁,op₂,op₃ = params.op₁, params.op₂, params.op₃
 
     α₁, α₂, α₃, ρ = params.α₁, params.α₂, params.α₃, params.ρ
     τ₀, σ₀ =  params.τ₀, params.σ₀

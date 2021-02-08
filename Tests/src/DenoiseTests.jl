@@ -30,13 +30,14 @@ const default_params = (
     noise_level = 0.1,
     verbose_iter = 50,
     maxiter = 1000,
-    save_results = true,
+    save_results = false,
     image_name = "lighthouse",
     save_iterations = false
 )
 
 const denoise_params = (
     α = 0.1,
+    op = FwdGradientOp(),
     # PDPS
     τ₀ = 5,
     σ₀ = 0.99/5,
@@ -45,6 +46,7 @@ const denoise_params = (
 
 const sd_denoise_params = (
     α = [0.09*ones(512,384) 0.8*ones(512,384)],
+    op = FwdGradientOp(),
     # PDPS
     τ₀ = 5,
     σ₀ = 0.99/5,
@@ -55,6 +57,9 @@ const sumregs_denoise_params = (
     α₁ = 0.02,
     α₂ = 0.03,
     α₃ = 0.05,
+    op₁ = FwdGradientOp(),
+    op₂ = BwdGradientOp(),
+    op₃ = CenteredGradientOp(),
     # PDPS
     τ₀ = 5,
     σ₀ = 0.99/5,
@@ -65,6 +70,9 @@ const sd_sumregs_denoise_params = (
     α₁ = [0.1*ones(512,256) 1e-10*ones(512,256) 1e-10*ones(512,256)],
     α₂ = [1e-10*ones(512,256) 0.1*ones(512,256) 1e-10*ones(512,256)],
     α₃ = [1e-10*ones(512,256) 1e-10*ones(512,256) 0.2*ones(512,256)],
+    op₁ = FwdGradientOp(),
+    op₂ = BwdGradientOp(),
+    op₃ = CenteredGradientOp(),
     # PDPS
     τ₀ = 5,
     σ₀ = 0.99/5,
@@ -103,13 +111,8 @@ function test_op_denoise(;
     # Launch (background) visualiser
     st, iterate = initialise_visualisation(visualise)
 
-    # Define Linear operator
-    #op = CenteredGradientOp()
-    op = BwdGradientOp()
-    #op = FwdGradientOp()
-
     # Run algorithm
-    x, y, st = op_denoise_pdps(b_noisy,op; iterate=iterate, params=params)
+    x, y, st = op_denoise_pdps(b_noisy; iterate=iterate, params=params)
 
     save_results(params, b, b_noisy, x, st)
 
@@ -137,13 +140,8 @@ function test_sd_op_denoise(;
     # Launch (background) visualiser
     st, iterate = initialise_visualisation(visualise)
 
-    # Define Linear operator
-    #op = CenteredGradientOp()
-    op = BwdGradientOp()
-    #op = FwdGradientOp()
-
     # Run algorithm
-    x, y, st = op_denoise_pdps(b_noisy,op; iterate=iterate, params=params)
+    x, y, st = op_denoise_pdps(b_noisy; iterate=iterate, params=params)
 
     save_results(params, b, b_noisy, x, st)
 
@@ -171,13 +169,8 @@ function test_sumregs_denoise(;
     # Launch (background) visualiser
     st, iterate = initialise_visualisation(visualise)
 
-    # Define Linear operator
-    op₁ = FwdGradientOp()
-    op₂ = BwdGradientOp()
-    op₃ = CenteredGradientOp()
-
     # Run algorithm
-    x, y₁, y₂, y₃, st = sumregs_denoise_pdps(b_noisy,op₁,op₂,op₃; iterate=iterate, params=params)
+    x, y₁, y₂, y₃, st = sumregs_denoise_pdps(b_noisy; iterate=iterate, params=params)
 
     save_results(params, b, b_noisy, x, st)
 
@@ -201,13 +194,8 @@ function test_sd_sumregs_denoise(;
     # Launch (background) visualiser
     st, iterate = initialise_visualisation(visualise)
 
-    # Define Linear operator
-    op₁ = FwdGradientOp()
-    op₂ = BwdGradientOp()
-    op₃ = CenteredGradientOp()
-
     # Run algorithm
-    x, y₁, y₂, y₃, st = sumregs_denoise_pdps(b_noisy,op₁,op₂,op₃; iterate=iterate, params=params)
+    x, y₁, y₂, y₃, st = sumregs_denoise_pdps(b_noisy; iterate=iterate, params=params)
 
     save_results(params, b, b_noisy, x, st)
 

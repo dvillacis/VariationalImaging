@@ -52,14 +52,16 @@ end
 # Algorithm
 ############
 
-function op_denoise_pdps(b :: Image, op :: LinOp{Image,Data};
+function op_denoise_pdps(b :: Image;
     xinit :: Union{Image,Nothing} = nothing,
     iterate = Iterate.simple_iterate,
-    params::NamedTuple) where Data
+    params::NamedTuple)
 
     ################################                                        
     # Extract and set up parameters
-    ################################                    
+    ################################     
+    
+    op = params.op
 
     α, ρ = params.α, params.ρ
     τ₀, σ₀ =  params.τ₀, params.σ₀
