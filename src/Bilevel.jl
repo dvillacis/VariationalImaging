@@ -6,9 +6,14 @@ __precompile__()
 
 module Bilevel
 
+using SparseArrays
+
+using AlgTools
 using AlgTools.Util
 using AlgTools.LinOps
 import AlgTools.Iterate
+
+using VariationalImaging.GradientOps
 
 using LinearAlgebra
 
@@ -29,25 +34,16 @@ Dataset = Tuple{Array{Float64,3},Array{Float64,3}}
 # Iterate initialisation
 #########################
 
-function init_rest(x::AbstractArray,learning_function::Function,Δ,ds)
+function init_rest(x,learning_function::Function,Δ,ds)
     x̄ = copy(x)
     u,fx,gx = learning_function(x,ds)
     ū = copy(u)
     fx̄ = copy(fx)
     gx̄ = copy(gx)
-    B = 0.1*Diagonal(ones(size(x)))
+    B = ZeroOp{typeof(x)}()
     return x, x̄, u, ū, fx, gx, fx̄, gx̄, Δ, B
 end
 
-function init_rest(x::Real,learning_function::Function,Δ,ds)
-    x̄ = copy(x)
-    u,fx,gx = learning_function(x,ds)
-    ū = copy(u)
-    fx̄ = copy(fx)
-    gx̄ = copy(gx)
-    B = 0.1
-    return x, x̄, u, ū, fx, gx, fx̄, gx̄, Δ, B
-end
 
 ############
 # Auxiliary Functions
@@ -57,7 +53,7 @@ function cauchy_point_box(x::Real,Δ,g,B)
     Δmax = 10.0
     γ = min(1,Δmax/norm(g))
     t = 0
-    gᵗBg = g'*(B*g)
+    gᵗBg = AlgTools.Util.dot(g,B(g))
     if gᵗBg ≤ 0 # Negative curvature detected
         t = (Δ/10.0)*γ
     else
@@ -66,9 +62,25 @@ function cauchy_point_box(x::Real,Δ,g,B)
     d = -t*g
     x_ = x + d
     if x_ <= 0
-        x_ = eps()
+       x_ = eps()
     end
     return x_-x
+end
+
+function cauchy_point_box(x::AbstractArray,Δ,g,B)
+    Δmax = 10.0
+    γ = min(1,Δmax/norm(g))
+    t = 0
+    gᵗBg = AlgTools.Util.dot(g,B(g))
+    if gᵗBg ≤ 0 # Negative curvature detected
+        t = (Δ/10.0)*γ
+    else
+        t = min(norm(g)^2/gᵗBg,(Δ/10.0)*γ)
+    end
+    d = -t*g
+    x_ = x + d
+    Px = clamp!(x_,eps(),Inf)
+    return Px-x
 end
 
 ############
@@ -101,19 +113,21 @@ function bilevel_learn(ds :: Dataset,
 
     v = iterate(params) do verbose :: Function
         
-        println("x=$x, Δ=$Δ, gx=$gx")
+        println("x=$(norm(x)), Δ=$Δ, gx=$(norm(gx))")
 
         p = cauchy_point_box(x,Δ,gx,B) # solve tr subproblem
 
         x̄ = x + p  # test new point
 
         ū,fx̄,gx̄ = learning_function(x̄,ds)
-        ρ = (-p'*gx - 0.5*p'*(B*p))/(fx-fx̄) # pred/ared
+        ρ = (-AlgTools.Util.dot(p,gx) - 0.5*AlgTools.Util.dot(p,B(p)))/(fx-fx̄) # pred/ared
 
         if ρ < η₁               # radius update
             Δ = β₁*Δ
         elseif ρ > η₂
             Δ = β₂*Δ
+        else
+            Δ = β₁*Δ
         end
 
         if ρ > η₁

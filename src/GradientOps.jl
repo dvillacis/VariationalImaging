@@ -11,7 +11,7 @@ using AlgTools.Util
 using AlgTools.LinOps
 using ImageTools.Gradient
 
-export FwdGradientOp, BwdGradientOp, CenteredGradientOp
+export FwdGradientOp, BwdGradientOp, CenteredGradientOp, ZeroOp, PatchOp
 
 Primal = Array{Float64,2}
 Dual = Array{Float64,3}
@@ -162,5 +162,83 @@ end
 function LinOps.opnorm_estimate(op::CenteredGradientOp)
     return sqrt(8)
 end
+
+###########################
+# Zero operator
+###########################
+
+struct ZeroOp{X} <: LinOp{X,X}
+end
+
+function (op::ZeroOp{X})(x::X) where X
+    return 0 .*x
+end
+
+function Base.adjoint(op::ZeroOp{X}) where X
+    return op
+end
+
+function LinOps.opnorm_estimate(op::ZeroOp{X}) where X
+    return 0
+end
+
+###########################
+# Patch Operator
+###########################
+
+struct PatchOp <: AdjointableOp{Primal,Primal}
+    size_in::Tuple
+    size_out::Tuple
+    size_ratio::Tuple
+end
+
+function PatchOp(param,ref)
+    sz_in = size(param)
+    sz_out = size(ref)
+    sz_ratio = (Int(sz_out[1]/sz_in[1]),Int(sz_out[2]/sz_in[2]))
+    return PatchOp(sz_in,sz_out,sz_ratio)
+end
+
+function (op::PatchOp)(x::Primal)
+    y = zeros(op.size_out)
+    inplace!(y,op,x)
+    return y
+end
+
+function LinOps.inplace!(y::Primal, op::PatchOp, x::Primal)
+    template = ones(op.size_ratio)
+    y .= kron(x,template)
+end
+
+function LinOps.calc_adjoint(op::PatchOp, y::Primal)
+    res = zeros(op.size_in)
+    calc_adjoint!(res,op,y)
+    return res
+end
+
+function LinOps.calc_adjoint!(res::Primal, op::PatchOp, y::Primal)
+    els = sum(ones(op.size_ratio))
+    M,N = op.size_ratio
+    n = 0
+    m = 0
+    if op.size_out == size(y)
+        for i=1:op.size_in[1]
+            for j=1:op.size_in[2]
+                res[i,j] = sum(y[m*M+1:(m+1)*M,n*N+1:(n+1)*N])/els
+                n += 1
+            end
+            m += 1
+            n = 0
+        end
+    else
+        @error "wrong dimensions on output matrix"
+    end
+end
+
+function LinOps.opnorm_estimate(op::PatchOp)
+    return 1
+end
+
+
 
 end # Module
