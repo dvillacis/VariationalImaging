@@ -7,11 +7,12 @@ __precompile__()
 
 module GradientOps
 
+using SparseArrays
 using AlgTools.Util
 using AlgTools.LinOps
 using ImageTools.Gradient
 
-export FwdGradientOp, BwdGradientOp, CenteredGradientOp, ZeroOp, PatchOp
+export FwdGradientOp, BwdGradientOp, CenteredGradientOp, ZeroOp, PatchOp, matrix
 
 Primal = Array{Float64,2}
 Dual = Array{Float64,3}
@@ -48,6 +49,13 @@ function LinOps.opnorm_estimate(op::FwdGradientOp)
     return sqrt(8)
 end
 
+# Sparse Matrix representation of the linear operator, assumimg a vectorial image
+function matrix(op::FwdGradientOp,n)
+    Hx = spdiagm(0=>-ones(n-1),1=>ones(n-1))
+	Gx = kron(spdiagm(0=>ones(n)),Hx)
+	Gy = spdiagm(0=>-ones(n^2-n),n=>ones(n^2-n))
+	return [Gx;Gy]
+end
 
 ###########################
 # Backward differences gradient linear operator
@@ -113,6 +121,14 @@ function LinOps.opnorm_estimate(op::BwdGradientOp)
     return sqrt(8)
 end
 
+# Sparse Matrix representation of the linear operator, assumimg a vectorial image
+function matrix(op::BwdGradientOp,n)
+    Hx = spdiagm(-1=>-ones(n-1),0=>[0;ones(n-1)])
+	Gx = kron(spdiagm(0=>ones(n)),Hx)
+	Gy = spdiagm(-n=>-ones(n^2-n),0=>[zeros(n);ones(n^2-n)])
+	return [Gx;Gy]
+end
+
 
 ###########################
 # Centered differences gradient linear operator
@@ -161,6 +177,14 @@ end
 
 function LinOps.opnorm_estimate(op::CenteredGradientOp)
     return sqrt(8)
+end
+
+# Sparse Matrix representation of the linear operator, assumimg a vectorial image
+function matrix(op::BwdGradientOp,n)
+    Hx = spdiagm(-1=>-ones(n-1),0=>[-1;zeros(n-2);1],1=>ones(n-1))
+	Gx = kron(spdiagm(0=>ones(n)),Hx)
+	Gy = spdiagm(-n=>-ones(n^2-n),0=>[-ones(n);zeros(n);ones(n)],n=>ones(n^2-n))
+	return [Gx;Gy]
 end
 
 ###########################
