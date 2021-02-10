@@ -40,7 +40,8 @@ function init_rest(x,learning_function::Function,Δ,ds)
     ū = copy(u)
     fx̄ = copy(fx)
     gx̄ = copy(gx)
-    B = ZeroOp{typeof(x)}()
+    #B = ZeroOp{typeof(x)}()
+    B = IdOp{typeof(x)}()
     return x, x̄, u, ū, fx, gx, fx̄, gx̄, Δ, B
 end
 

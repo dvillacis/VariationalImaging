@@ -12,7 +12,7 @@ using AlgTools.Util
 using AlgTools.LinOps
 using ImageTools.Gradient
 
-export FwdGradientOp, BwdGradientOp, CenteredGradientOp, ZeroOp, PatchOp, matrix
+export FwdGradientOp, BwdGradientOp, CenteredGradientOp, ZeroOp, PatchOp, matrix, GradientOp
 
 Primal = Array{Float64,2}
 Dual = Array{Float64,3}
@@ -180,7 +180,7 @@ function LinOps.opnorm_estimate(op::CenteredGradientOp)
 end
 
 # Sparse Matrix representation of the linear operator, assumimg a vectorial image
-function matrix(op::BwdGradientOp,n)
+function matrix(op::CenteredGradientOp,n)
     Hx = spdiagm(-1=>-ones(n-1),0=>[-1;zeros(n-2);1],1=>ones(n-1))
 	Gx = kron(spdiagm(0=>ones(n)),Hx)
 	Gy = spdiagm(-n=>-ones(n^2-n),0=>[-ones(n);zeros(n);ones(n)],n=>ones(n^2-n))
