@@ -12,7 +12,7 @@ using AlgTools.Util
 using AlgTools.LinOps
 using ImageTools.Gradient
 
-export FwdGradientOp, BwdGradientOp, CenteredGradientOp, ZeroOp, PatchOp, matrix, GradientOp
+export FwdGradientOp, BwdGradientOp, CenteredGradientOp, ZeroOp, PatchOp, matrix
 
 Primal = Array{Float64,2}
 Dual = Array{Float64,3}
@@ -125,7 +125,7 @@ end
 function matrix(op::BwdGradientOp,n)
     Hx = spdiagm(-1=>-ones(n-1),0=>[0;ones(n-1)])
 	Gx = kron(spdiagm(0=>ones(n)),Hx)
-	Gy = spdiagm(-n=>-ones(n^2-n),0=>[zeros(n);ones(n^2-n)])
+	Gy = spdiagm(-n=>-ones(n^2-n),0=>[spzeros(n);ones(n^2-n)])
 	return [Gx;Gy]
 end
 
@@ -183,7 +183,7 @@ end
 function matrix(op::CenteredGradientOp,n)
     Hx = spdiagm(-1=>-ones(n-1),0=>[-1;zeros(n-2);1],1=>ones(n-1))
 	Gx = kron(spdiagm(0=>ones(n)),Hx)
-	Gy = spdiagm(-n=>-ones(n^2-n),0=>[-ones(n);zeros(n);ones(n)],n=>ones(n^2-n))
+	Gy = spdiagm(-n=>-ones(n^2-n),0=>[-ones(n);spzeros(n);ones(n)],n=>ones(n^2-n))
 	return [Gx;Gy]
 end
 
@@ -241,14 +241,13 @@ function LinOps.calc_adjoint(op::PatchOp, y::Primal)
 end
 
 function LinOps.calc_adjoint!(res::Primal, op::PatchOp, y::Primal)
-    els = sum(ones(op.size_ratio))
     M,N = op.size_ratio
     n = 0
     m = 0
     if op.size_out == size(y)
         for i=1:op.size_in[1]
             for j=1:op.size_in[2]
-                res[i,j] = sum(y[m*M+1:(m+1)*M,n*N+1:(n+1)*N])/els
+                res[i,j] = sum(y[m*M+1:(m+1)*M,n*N+1:(n+1)*N])
                 n += 1
             end
             m += 1

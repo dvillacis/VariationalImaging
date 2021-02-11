@@ -23,6 +23,7 @@ ImageSize = Tuple{Integer,Integer}
 Image = Array{Float64,2}
 Primal = Image
 Dual = Array{Float64,3}
+Dataset = Array{Float64,3}
 
 #########################
 # Iterate initialisation
@@ -133,6 +134,20 @@ function sumregs_denoise_pdps(b :: Image;
     end
 
     return x, y₁, y₂, y₃, v
+end
+
+
+function sumregs_denoise_pdps(ds :: Dataset;
+    xinit :: Union{Image,Nothing} = nothing,
+    iterate = Iterate.simple_iterate,
+    params::NamedTuple)
+
+    M,N,O = size(ds)
+    out = zeros(size(ds))
+    for i=1:O
+        out[:,:,i],y,st = sumregs_denoise_pdps(ds[:,:,i];xinit=xinit,iterate=iterate,params=params) 
+    end
+    return out
 end
 
 end # Module

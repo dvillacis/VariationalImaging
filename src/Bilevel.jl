@@ -114,7 +114,7 @@ function bilevel_learn(ds :: Dataset,
 
     v = iterate(params) do verbose :: Function
         
-        println("x=$(norm(x)), Δ=$Δ, gx=$(norm(gx))")
+        println("x=$(norm(x,1)/length(x)), Δ=$Δ, gx=$(norm(gx,1)/length(x))")
 
         p = cauchy_point_box(x,Δ,gx,B) # solve tr subproblem
 
