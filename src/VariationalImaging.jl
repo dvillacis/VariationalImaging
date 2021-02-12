@@ -24,13 +24,11 @@ include("operators/PatchOperator.jl")
 #include("utilities/Experiment.jl")
 
 include("Util.jl")
-include("TestDatasets.jl")
 
 include("GradientOps.jl")
 include("SumRegsDenoise.jl")
 include("OpDenoise.jl")
 include("SDDenoise.jl")
-include("Bilevel.jl")
 
 include("bilevel_learning/MatrixUtils.jl")
 #include("bilevel_learning/NSTR.jl")
