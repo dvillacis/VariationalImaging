@@ -2,7 +2,8 @@
 module DenoiseTests
 
 # Our exports
-export test_op_denoise, test_sd_op_denoise, test_sumregs_denoise, test_sd_sumregs_denoise
+export test_op_denoise, test_sd_op_denoise
+export test_sumregs_denoise, test_sd_sumregs_denoise
 
 # Dependencies
 using Printf
