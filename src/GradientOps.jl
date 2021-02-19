@@ -216,8 +216,16 @@ struct PatchOp <: AdjointableOp{Primal,Primal}
     size_ratio::Tuple
 end
 
-function PatchOp(param,ref)
+function PatchOp(param::AbstractArray{T,2},ref::AbstractArray{T,2}) where T
     sz_in = size(param)
+    sz_out = size(ref)
+    sz_ratio = (Int(sz_out[1]/sz_in[1]),Int(sz_out[2]/sz_in[2]))
+    return PatchOp(sz_in,sz_out,sz_ratio)
+end
+
+function PatchOp(param::AbstractArray{T,3},ref::AbstractArray{T,2}) where T
+    m,n,o = size(param)
+    sz_in = (m,n)
     sz_out = size(ref)
     sz_ratio = (Int(sz_out[1]/sz_in[1]),Int(sz_out[2]/sz_in[2]))
     return PatchOp(sz_in,sz_out,sz_ratio)
@@ -229,7 +237,17 @@ function (op::PatchOp)(x::Primal)
     return y
 end
 
-function LinOps.inplace!(y::Primal, op::PatchOp, x::Primal)
+function (op::PatchOp)(x::AbstractArray{T,3}) where T
+    m,n,o = size(x)
+    y = zeros(op.size_out...,o)
+    for i=1:o
+        r = @view y[:,:,i]
+        inplace!(r,op,x[:,:,i])
+    end
+    return y
+end
+
+function LinOps.inplace!(y::Union{Primal,SubArray}, op::PatchOp, x::Primal)
     template = ones(op.size_ratio)
     y .= kron(x,template)
 end
