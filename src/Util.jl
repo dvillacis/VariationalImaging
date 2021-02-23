@@ -1,7 +1,10 @@
 
 module Util
 
-export norm₂₁w, _proj_norm₂₁ball!
+export norm₂₁w, _proj_norm₂₁ball!, _dot
+
+Primal = AbstractArray{Float64,2}
+Scalar = AbstractArray{Float64,1}
 
 @inline function _proj_norm₂₁ball!(y, α::Real)
     α²=α*α
@@ -83,6 +86,26 @@ function norm₂₁w(y::AbstractArray{T,3},w::Real) where {T}
         @error "Problems with dimensions"
     end
 
+    return accum
+end
+
+@inline function _dot(x::Union{Real,Primal,Scalar}, y::Union{Real,Primal,Scalar})
+    @assert(length(x)==length(y))
+
+    accum=0
+    for i=1:length(y)
+        @inbounds accum += x[i]*y[i]
+    end
+    return accum
+end
+
+@inline function _dot(x::AbstractArray{T,3}, y::AbstractArray{T,3}) where T
+    @assert(length(x)==length(y))
+    m,n,o = size(x)
+    accum=0
+    for i=1:o
+        accum += _dot(x[:,:,i],y[:,:,i])
+    end
     return accum
 end
 

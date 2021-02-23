@@ -12,7 +12,7 @@ using AlgTools.Util
 using AlgTools.LinOps
 using ImageTools.Gradient
 
-export FwdGradientOp, BwdGradientOp, CenteredGradientOp, ZeroOp, PatchOp, matrix
+export FwdGradientOp, BwdGradientOp, CenteredGradientOp, ZeroOp, PatchOp, matrix, calc_adjoint,calc_adjoint!
 
 Primal = Array{Float64,2}
 Dual = Array{Float64,3}
@@ -258,7 +258,17 @@ function LinOps.calc_adjoint(op::PatchOp, y::Primal)
     return res
 end
 
-function LinOps.calc_adjoint!(res::Primal, op::PatchOp, y::Primal)
+function LinOps.calc_adjoint(op::PatchOp, y::AbstractArray{T,3}) where T
+    m,n,o = size(y)
+    res = zeros(op.size_in...,o)
+    for i=1:o
+        r = @view res[:,:,i]
+        calc_adjoint!(r,op,y[:,:,i])
+    end
+    return res
+end
+
+function LinOps.calc_adjoint!(res::Union{Primal,SubArray}, op::PatchOp, y::Primal)
     M,N = op.size_ratio
     n = 0
     m = 0
