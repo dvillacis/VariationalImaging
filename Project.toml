@@ -22,6 +22,7 @@ StringDistances = "88034a9c-02f8-509d-84a9-84ec65e18404"
 
 [compat]
 FileIO = "1.4"
+Krylov = "0.7"
 StringDistances = "0.10"
 julia = "1"
 
